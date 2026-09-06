@@ -245,12 +245,16 @@ def test_cli_sensitivity_command():
     assert "Levered IRR Sensitivity" in res_mat.output
 
     # 2. Breakeven mode
-    res_be = runner.invoke(cli, ["sensitivity", "--deal-id", "austin-multifamily", "-m", "breakeven"])
+    res_be = runner.invoke(
+        cli, ["sensitivity", "--deal-id", "austin-multifamily", "-m", "breakeven"]
+    )
     assert res_be.exit_code == 0
     assert "Operational Breakeven & Downside Safety Margins" in res_be.output
 
     # 3. Scenarios mode
-    res_scen = runner.invoke(cli, ["sensitivity", "--deal-id", "austin-multifamily", "-m", "scenarios"])
+    res_scen = runner.invoke(
+        cli, ["sensitivity", "--deal-id", "austin-multifamily", "-m", "scenarios"]
+    )
     assert res_scen.exit_code == 0
     assert "Macro Scenario Return Comparison" in res_scen.output
 
@@ -437,7 +441,9 @@ def test_cli_deal_subcommands(tmp_path: Path):
     assert "Purchase Price" in res_diff2.output
 
     # 5. Revert revision
-    res_rev = runner.invoke(cli, ["deal", "revert", "--deal-id", "phoenix-industrial", "--rev", "1"])
+    res_rev = runner.invoke(
+        cli, ["deal", "revert", "--deal-id", "phoenix-industrial", "--rev", "1"]
+    )
     assert res_rev.exit_code == 0
     assert "Successfully reverted deal" in res_rev.output
 
@@ -593,11 +599,15 @@ def test_cli_error_handling_and_fallback_branches(tmp_path: Path):
     res_exp_none = runner.invoke(cli, ["export", "--deal-id", "non-existent-deal"])
     assert res_exp_none.exit_code != 0
 
-    res_exp_wf = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily", "-f", "waterfall"])
+    res_exp_wf = runner.invoke(
+        cli, ["export", "--deal-id", "austin-multifamily", "-f", "waterfall"]
+    )
     assert res_exp_wf.exit_code == 0
     assert "Total Distributable Cash" in res_exp_wf.output
 
-    res_exp_sens = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily", "-f", "sensitivity"])
+    res_exp_sens = runner.invoke(
+        cli, ["export", "--deal-id", "austin-multifamily", "-f", "sensitivity"]
+    )
     assert res_exp_sens.exit_code == 0
     assert "Rent Growth / Exit Cap" in res_exp_sens.output
 
@@ -612,17 +622,25 @@ def test_cli_error_handling_and_fallback_branches(tmp_path: Path):
     assert "austin-multifamily" in res_exp_json.output
 
     # 11. Deal group error paths
-    res_deal_exp_none = runner.invoke(cli, ["deal", "export", "--deal-id", "non-existent-deal", "-o", str(tmp_path / "out.json")])
+    res_deal_exp_none = runner.invoke(
+        cli, ["deal", "export", "--deal-id", "non-existent-deal", "-o", str(tmp_path / "out.json")]
+    )
     assert res_deal_exp_none.exit_code != 0
 
     res_deal_del_none = runner.invoke(cli, ["deal", "delete", "--deal-id", "non-existent-deal"])
     assert "not found" in res_deal_del_none.output
 
-    res_deal_rev_none = runner.invoke(cli, ["deal", "create-revision", "--deal-id", "non-existent-deal"])
+    res_deal_rev_none = runner.invoke(
+        cli, ["deal", "create-revision", "--deal-id", "non-existent-deal"]
+    )
     assert res_deal_rev_none.exit_code != 0
 
-    res_deal_revert_none = runner.invoke(cli, ["deal", "revert", "--deal-id", "austin-multifamily", "--rev", "999"])
+    res_deal_revert_none = runner.invoke(
+        cli, ["deal", "revert", "--deal-id", "austin-multifamily", "--rev", "999"]
+    )
     assert "not found" in res_deal_revert_none.output
 
-    res_deal_rev_empty = runner.invoke(cli, ["deal", "revisions", "--deal-id", "austin-multifamily"])
+    res_deal_rev_empty = runner.invoke(
+        cli, ["deal", "revisions", "--deal-id", "austin-multifamily"]
+    )
     assert res_deal_rev_empty.exit_code == 0

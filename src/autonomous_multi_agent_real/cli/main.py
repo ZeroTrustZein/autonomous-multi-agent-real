@@ -98,7 +98,9 @@ def cli():
     help="Filter deals by property asset class.",
 )
 @click.option("--min-units", type=int, default=None, help="Filter deals by minimum unit count.")
-@click.option("--max-price", type=float, default=None, help="Filter deals by maximum purchase price.")
+@click.option(
+    "--max-price", type=float, default=None, help="Filter deals by maximum purchase price."
+)
 @click.option("--search", "-q", default=None, help="Search text in title, address, or ID.")
 @click.option("--json-output", "--json", is_flag=True, help="Output results in JSON format.")
 def list_deals(
@@ -260,9 +262,15 @@ def simulate_deal(deal_id: str, iterations: int, seed: int, json_output: bool):
 @click.option(
     "--market-rent", "-m", required=True, type=float, help="Average monthly market rent per unit."
 )
-@click.option("--down-payment", default=0.25, type=float, help="Equity down payment ratio (default 0.25).")
-@click.option("--interest-rate", default=0.065, type=float, help="Senior loan interest rate (default 0.065).")
-@click.option("--exit-cap", default=0.065, type=float, help="Exit capitalization rate (default 0.065).")
+@click.option(
+    "--down-payment", default=0.25, type=float, help="Equity down payment ratio (default 0.25)."
+)
+@click.option(
+    "--interest-rate", default=0.065, type=float, help="Senior loan interest rate (default 0.065)."
+)
+@click.option(
+    "--exit-cap", default=0.065, type=float, help="Exit capitalization rate (default 0.065)."
+)
 @click.option("--hold", default=5, type=int, help="Investment hold period in years (default 5).")
 @click.option("--json-output", "--json", is_flag=True, help="Output summary result in JSON.")
 def quick_underwrite(
@@ -341,9 +349,21 @@ def quick_underwrite(
 
 @cli.command(name="waterfall")
 @click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
-@click.option("--pref", default=0.08, type=float, help="LP preferred return hurdle rate (e.g. 0.08 for 8%).")
-@click.option("--lp-share", default=0.90, type=float, help="Limited Partner equity ownership share (default 0.90).")
-@click.option("--gp-share", default=0.10, type=float, help="General Partner equity ownership share (default 0.10).")
+@click.option(
+    "--pref", default=0.08, type=float, help="LP preferred return hurdle rate (e.g. 0.08 for 8%)."
+)
+@click.option(
+    "--lp-share",
+    default=0.90,
+    type=float,
+    help="Limited Partner equity ownership share (default 0.90).",
+)
+@click.option(
+    "--gp-share",
+    default=0.10,
+    type=float,
+    help="General Partner equity ownership share (default 0.10).",
+)
 @click.option("--json-output", "--json", is_flag=True, help="Output waterfall results in JSON.")
 def waterfall_cmd(
     deal_id: str,
@@ -440,9 +460,15 @@ def sensitivity_cmd(deal_id: str, mode: str, json_output: bool):
 
 @cli.command(name="tax")
 @click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
-@click.option("--cost-seg/--no-cost-seg", default=True, help="Toggle cost segregation study modeling.")
-@click.option("--ordinary-rate", default=0.37, type=float, help="Ordinary income tax rate (default 0.37).")
-@click.option("--cap-gains-rate", default=0.20, type=float, help="Capital gains tax rate (default 0.20).")
+@click.option(
+    "--cost-seg/--no-cost-seg", default=True, help="Toggle cost segregation study modeling."
+)
+@click.option(
+    "--ordinary-rate", default=0.37, type=float, help="Ordinary income tax rate (default 0.37)."
+)
+@click.option(
+    "--cap-gains-rate", default=0.20, type=float, help="Capital gains tax rate (default 0.20)."
+)
 @click.option("--json-output", "--json", is_flag=True, help="Output tax schedule in JSON.")
 def tax_cmd(
     deal_id: str,
@@ -484,7 +510,9 @@ def tax_cmd(
 
 @cli.command(name="optimize")
 @click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
-@click.option("--target-irr", "-t", default=0.15, type=float, help="Target levered IRR hurdle (e.g. 0.15).")
+@click.option(
+    "--target-irr", "-t", default=0.15, type=float, help="Target levered IRR hurdle (e.g. 0.15)."
+)
 @click.option("--target-dscr", default=1.25, type=float, help="Minimum target Year 1 DSCR.")
 @click.option("--target-dy", default=0.08, type=float, help="Minimum target Year 1 Debt Yield.")
 @click.option(
@@ -529,7 +557,9 @@ def optimize_cmd(
             target_min_dscr=target_dscr,
             target_min_debt_yield=target_dy,
         )
-        avg_curr = deal.total_market_monthly_rent / deal.total_units if deal.total_units > 0 else 0.0
+        avg_curr = (
+            deal.total_market_monthly_rent / deal.total_units if deal.total_units > 0 else 0.0
+        )
         delta_pct = (req_rent - avg_curr) / avg_curr if avg_curr > 0 else 0.0
 
         if json_output:
@@ -594,7 +624,9 @@ def audit_deal(deal_id: str, json_output: bool):
 
 @cli.command(name="debate")
 @click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
-@click.option("--json-output", "--json", is_flag=True, help="Output deliberation transcript in JSON.")
+@click.option(
+    "--json-output", "--json", is_flag=True, help="Output deliberation transcript in JSON."
+)
 def debate_cmd(deal_id: str, json_output: bool):
     """Display autonomous swarm deliberation, cross-agent challenges, and committee consensus."""
     repo = DealRepository()
@@ -746,7 +778,14 @@ def deal_group():
 
 
 @deal_group.command(name="import")
-@click.option("--file", "-f", "file_path", required=True, type=click.Path(exists=True), help="Path to deal JSON file.")
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to deal JSON file.",
+)
 def deal_import(file_path: str):
     """Import a property deal from JSON file into the repository."""
     raw = Path(file_path).read_text(encoding="utf-8")
@@ -754,7 +793,9 @@ def deal_import(file_path: str):
     deal = PropertyDeal.model_validate(data)
     repo = DealRepository()
     repo.save_deal(deal)
-    console.print(f"[green]Successfully imported deal '{deal.id}' ({deal.title}) into repository.[/green]")
+    console.print(
+        f"[green]Successfully imported deal '{deal.id}' ({deal.title}) into repository.[/green]"
+    )
 
 
 @deal_group.command(name="export")

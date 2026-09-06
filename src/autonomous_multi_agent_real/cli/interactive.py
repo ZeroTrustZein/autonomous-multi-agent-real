@@ -75,11 +75,17 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
 
         deals = repo.list_deals()
         deal_ids = [d.id for d in deals]
-        default_id = "austin-multifamily" if "austin-multifamily" in deal_ids else (deal_ids[0] if deal_ids else "")
+        default_id = (
+            "austin-multifamily"
+            if "austin-multifamily" in deal_ids
+            else (deal_ids[0] if deal_ids else "")
+        )
 
         if choice == "1":
             render_deals_table(deals, con)
-            inspect_id = click.prompt("Enter deal ID to inspect (or press Enter to skip)", default="").strip()
+            inspect_id = click.prompt(
+                "Enter deal ID to inspect (or press Enter to skip)", default=""
+            ).strip()
             if inspect_id:
                 target = repo.get_deal(inspect_id)
                 if target:
@@ -135,7 +141,9 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
             cfs = [cf.net_cash_flow for cf in res.cash_flows]
             wf_engine = WaterfallEngine()
             wf_engine.structure.preferred_return_rate = pref
-            wf_res = wf_engine.calculate(total_equity=res.debt_sizing.equity_required, annual_cash_flows=cfs)
+            wf_res = wf_engine.calculate(
+                total_equity=res.debt_sizing.equity_required, annual_cash_flows=cfs
+            )
             render_waterfall_table(wf_res, con)
 
         elif choice == "5":
@@ -175,12 +183,18 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
             if not deal:
                 con.print(f"[red]Deal '{deal_id}' not found.[/red]")
                 continue
-            target_irr = click.prompt("Target Levered IRR Hurdle (e.g. 0.15)", default=0.15, type=float)
+            target_irr = click.prompt(
+                "Target Levered IRR Hurdle (e.g. 0.15)", default=0.15, type=float
+            )
             mode = click.prompt("Solver Mode [price / rent]", default="price").strip().lower()
             optimizer = DealOptimizer()
             if mode == "rent":
                 req_rent = optimizer.solve_required_market_rent(deal, target_levered_irr=target_irr)
-                avg_curr = deal.total_market_monthly_rent / deal.total_units if deal.total_units > 0 else 0.0
+                avg_curr = (
+                    deal.total_market_monthly_rent / deal.total_units
+                    if deal.total_units > 0
+                    else 0.0
+                )
                 con.print(
                     Panel(
                         f"Current Market Rent: [bold]${avg_curr:,.2f}/unit/mo[/bold]\n"

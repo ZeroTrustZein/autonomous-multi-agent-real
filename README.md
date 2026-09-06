@@ -1,8 +1,10 @@
 # Autonomous Multi-Agent Real Estate Deal Underwriting & Cash Flow Simulation Workflow Engine
 
+[![CI](https://github.com/zein/autonomous-multi-agent-real/actions/workflows/ci.yml/badge.svg)](https://github.com/zein/autonomous-multi-agent-real/actions)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Type Checked: Mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://mypy-lang.org/)
 
 An autonomous multi-agent underwriting and cash flow simulation workflow engine for real estate investments. Built in Python with Pydantic v2, NumPy vectorized Monte Carlo simulation, and an event-driven agent pipeline.
 

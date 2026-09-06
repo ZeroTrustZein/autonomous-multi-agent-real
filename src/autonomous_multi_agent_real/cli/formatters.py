@@ -77,7 +77,9 @@ def render_deal_detail(deal: PropertyDeal, console: Console) -> None:
         f"[bold]Exit Cap Rate:[/bold] {deal.exit_cap_rate:.2%}  |  "
         f"[bold]Selling Costs:[/bold] {deal.selling_costs_pct:.1%}"
     )
-    console.print(Panel(info_text, title=f"Property Deal: {deal.title} ({deal.address})", border_style="cyan"))
+    console.print(
+        Panel(info_text, title=f"Property Deal: {deal.title} ({deal.address})", border_style="cyan")
+    )
 
     # Unit Mix Table
     if deal.unit_mix:
@@ -106,21 +108,39 @@ def render_deal_detail(deal: PropertyDeal, console: Console) -> None:
 
     # Operating Expenses Table
     exp = deal.expenses
-    exp_table = Table(title="Pro-Forma Operating Expenses (Year 1)", show_header=True, header_style="bold red")
+    exp_table = Table(
+        title="Pro-Forma Operating Expenses (Year 1)", show_header=True, header_style="bold red"
+    )
     exp_table.add_column("Line Item", style="white")
     exp_table.add_column("Annual Cost ($)", justify="right")
     exp_table.add_column("Per Unit / Year ($)", justify="right")
 
     u = deal.total_units if deal.total_units > 0 else 1
-    exp_table.add_row("Property Taxes", f"${exp.property_taxes:,.0f}", f"${exp.property_taxes / u:,.0f}")
+    exp_table.add_row(
+        "Property Taxes", f"${exp.property_taxes:,.0f}", f"${exp.property_taxes / u:,.0f}"
+    )
     exp_table.add_row("Insurance", f"${exp.insurance:,.0f}", f"${exp.insurance / u:,.0f}")
-    exp_table.add_row("Repairs & Maintenance", f"${exp.repairs_and_maintenance:,.0f}", f"${exp.repairs_and_maintenance / u:,.0f}")
+    exp_table.add_row(
+        "Repairs & Maintenance",
+        f"${exp.repairs_and_maintenance:,.0f}",
+        f"${exp.repairs_and_maintenance / u:,.0f}",
+    )
     exp_table.add_row("Utilities", f"${exp.utilities:,.0f}", f"${exp.utilities / u:,.0f}")
-    exp_table.add_row("Admin & Legal", f"${exp.admin_and_legal:,.0f}", f"${exp.admin_and_legal / u:,.0f}")
+    exp_table.add_row(
+        "Admin & Legal", f"${exp.admin_and_legal:,.0f}", f"${exp.admin_and_legal / u:,.0f}"
+    )
     exp_table.add_row("Management Fee %", f"{exp.property_management_pct:.1%}", "-")
-    exp_table.add_row("Replacement Reserves", f"${exp.replacement_reserves_per_unit * u:,.0f}", f"${exp.replacement_reserves_per_unit:,.0f}")
+    exp_table.add_row(
+        "Replacement Reserves",
+        f"${exp.replacement_reserves_per_unit * u:,.0f}",
+        f"${exp.replacement_reserves_per_unit:,.0f}",
+    )
     fixed_tot = exp.fixed_annual_expenses(u)
-    exp_table.add_row("[bold]Total Fixed Expenses[/bold]", f"[bold]${fixed_tot:,.0f}[/bold]", f"[bold]${fixed_tot / u:,.0f}[/bold]")
+    exp_table.add_row(
+        "[bold]Total Fixed Expenses[/bold]",
+        f"[bold]${fixed_tot:,.0f}[/bold]",
+        f"[bold]${fixed_tot / u:,.0f}[/bold]",
+    )
     console.print(exp_table)
 
     # Financing Terms Table
@@ -223,19 +243,37 @@ def render_monte_carlo_table(mc: MonteCarloSimulationResult, console: Console) -
     mc_table.add_column("Value", justify="right", style="bold yellow")
     mc_table.add_column("Risk Interpretation", style="dim")
 
-    mc_table.add_row("Mean Levered IRR", f"{mc.mean_levered_irr:.1%}", "Central stochastic projection")
+    mc_table.add_row(
+        "Mean Levered IRR", f"{mc.mean_levered_irr:.1%}", "Central stochastic projection"
+    )
     mc_table.add_row("Standard Deviation", f"{mc.std_levered_irr:.1%}", "Volatility of returns")
     mc_table.add_row("Median Levered IRR (P50)", f"{mc.p50_irr:.1%}", "50th percentile baseline")
-    mc_table.add_row("Downside Case (P10 IRR)", f"{mc.p10_irr:.1%}", "90% confidence downside floor")
+    mc_table.add_row(
+        "Downside Case (P10 IRR)", f"{mc.p10_irr:.1%}", "90% confidence downside floor"
+    )
     mc_table.add_row("Upside Case (P90 IRR)", f"{mc.p90_irr:.1%}", "Top-decile outperformance")
-    mc_table.add_row("Mean Equity Multiple", f"{mc.mean_equity_multiple:.2f}x", "Average capital multiple")
-    mc_table.add_row("Prob(Negative Return)", f"{mc.probability_negative_irr:.1%}", "Risk of principal loss")
-    mc_table.add_row("Prob(DSCR Covenant Breach < 1.0x)", f"{mc.probability_dscr_breach:.1%}", "Risk of debt service shortfall")
+    mc_table.add_row(
+        "Mean Equity Multiple", f"{mc.mean_equity_multiple:.2f}x", "Average capital multiple"
+    )
+    mc_table.add_row(
+        "Prob(Negative Return)", f"{mc.probability_negative_irr:.1%}", "Risk of principal loss"
+    )
+    mc_table.add_row(
+        "Prob(DSCR Covenant Breach < 1.0x)",
+        f"{mc.probability_dscr_breach:.1%}",
+        "Risk of debt service shortfall",
+    )
 
     if mc.var_95_irr is not None:
-        mc_table.add_row("Value-at-Risk (VaR 95%)", f"{mc.var_95_irr:.2%}", "95% worst-case loss threshold")
+        mc_table.add_row(
+            "Value-at-Risk (VaR 95%)", f"{mc.var_95_irr:.2%}", "95% worst-case loss threshold"
+        )
     if mc.cvar_95_irr is not None:
-        mc_table.add_row("Conditional VaR (CVaR 95%)", f"{mc.cvar_95_irr:.2%}", "Expected return in worst 5% tail")
+        mc_table.add_row(
+            "Conditional VaR (CVaR 95%)",
+            f"{mc.cvar_95_irr:.2%}",
+            "Expected return in worst 5% tail",
+        )
 
     console.print(mc_table)
 
@@ -254,7 +292,9 @@ def render_monte_carlo_table(mc: MonteCarloSimulationResult, console: Console) -
         console.print(va_table)
 
 
-def render_agent_reports_table(agent_reports: Dict[str, AgentAnalysisReport], console: Console) -> None:
+def render_agent_reports_table(
+    agent_reports: Dict[str, AgentAnalysisReport], console: Console
+) -> None:
     """Render autonomous swarm agent reports and verdicts."""
     agent_table = Table(
         title="Autonomous Swarm Agent Deliberations", show_header=True, header_style="bold white"
@@ -296,10 +336,16 @@ def render_waterfall_table(wf: WaterfallResult, console: Console) -> None:
         f"Distributions ${wf.gp_total_distributions:,.0f} (Promote: ${wf.gp_total_promote:,.0f}) | "
         f"IRR: [bold green]{wf.gp_irr:.2%}[/bold green] | Multiple: [bold green]{wf.gp_equity_multiple:.2f}x[/bold green]"
     )
-    console.print(Panel(panel_text, title="Private Equity Waterfall Distribution Summary", border_style="cyan"))
+    console.print(
+        Panel(
+            panel_text, title="Private Equity Waterfall Distribution Summary", border_style="cyan"
+        )
+    )
 
     # Distribution Schedule Table
-    table = Table(title="Annual Distribution Schedule ($)", show_header=True, header_style="bold cyan")
+    table = Table(
+        title="Annual Distribution Schedule ($)", show_header=True, header_style="bold cyan"
+    )
     table.add_column("Year", justify="center")
     table.add_column("Distributable", justify="right")
     table.add_column("LP Distribution", justify="right", style="cyan")
@@ -354,12 +400,18 @@ def render_breakeven_panel(be: BreakevenMetrics, console: Console) -> None:
         f"(Margin of Safety: [bold green]{be.margin_of_safety_rent_pct:+.1%}[/bold green])\n"
         f"[bold]Required NOI for Senior Debt Service:[/bold] ${be.breakeven_noi_for_debt_service:,.0f}/year"
     )
-    console.print(Panel(panel_text, title="Operational Breakeven & Downside Safety Margins", border_style="blue"))
+    console.print(
+        Panel(
+            panel_text, title="Operational Breakeven & Downside Safety Margins", border_style="blue"
+        )
+    )
 
 
 def render_scenario_table(scenarios: Dict[str, DealMetrics], console: Console) -> None:
     """Render scenario comparison (Base vs Bull vs Bear)."""
-    table = Table(title="Macro Scenario Return Comparison", show_header=True, header_style="bold magenta")
+    table = Table(
+        title="Macro Scenario Return Comparison", show_header=True, header_style="bold magenta"
+    )
     table.add_column("Scenario", style="cyan")
     table.add_column("Levered IRR", justify="right", style="bold green")
     table.add_column("Unlevered IRR", justify="right")
@@ -385,7 +437,9 @@ def render_scenario_table(scenarios: Dict[str, DealMetrics], console: Console) -
     console.print(table)
 
 
-def render_tax_table(tax: TaxAnalysisResult, console: Console, cost_seg_applied: bool = False) -> None:
+def render_tax_table(
+    tax: TaxAnalysisResult, console: Console, cost_seg_applied: bool = False
+) -> None:
     """Render tax analysis, cost segregation benefits, and after-tax returns."""
     irr_delta = tax.after_tax_irr - tax.pre_tax_irr
     tax_savings = sum(-s.tax_liability for s in tax.annual_schedule if s.tax_liability < 0)
@@ -398,10 +452,16 @@ def render_tax_table(tax: TaxAnalysisResult, console: Console, cost_seg_applied:
         f"[bold]Cost Segregation Utilized:[/bold] {'[green]YES[/green]' if cost_seg_applied else '[yellow]NO (Straight-Line MACRS)[/yellow]'}\n"
         f"[bold]Estimated Exit Recapture & Capital Gains Tax:[/bold] ${tax.total_exit_taxes:,.0f}"
     )
-    console.print(Panel(panel_text, title="Real Estate Tax Analysis & Depreciation Shield", border_style="green"))
+    console.print(
+        Panel(
+            panel_text, title="Real Estate Tax Analysis & Depreciation Shield", border_style="green"
+        )
+    )
 
     # Yearly tax schedule table
-    table = Table(title="Annual Tax Depreciation Schedule ($)", show_header=True, header_style="bold green")
+    table = Table(
+        title="Annual Tax Depreciation Schedule ($)", show_header=True, header_style="bold green"
+    )
     table.add_column("Yr", justify="center")
     table.add_column("NOI", justify="right")
     table.add_column("Interest", justify="right")
@@ -411,7 +471,9 @@ def render_tax_table(tax: TaxAnalysisResult, console: Console, cost_seg_applied:
     table.add_column("After-Tax Cash Flow", justify="right", style="bold green")
 
     for s in tax.annual_schedule:
-        tax_str = f"-${abs(s.tax_liability):,.0f}" if s.tax_liability < 0 else f"${s.tax_liability:,.0f}"
+        tax_str = (
+            f"-${abs(s.tax_liability):,.0f}" if s.tax_liability < 0 else f"${s.tax_liability:,.0f}"
+        )
         table.add_row(
             str(s.year),
             f"${s.noi:,.0f}",
@@ -441,7 +503,9 @@ def render_optimizer_panel(opt: PricingOptimizationResult, console: Console) -> 
         f"[bold]Valuation Verdict:[/bold] {status_str}"
     )
     border_color = "red" if opt.is_overpriced else "green"
-    console.print(Panel(panel_text, title="Deal Pricing & Hurdle Return Optimizer", border_style=border_color))
+    console.print(
+        Panel(panel_text, title="Deal Pricing & Hurdle Return Optimizer", border_style=border_color)
+    )
 
 
 def render_compliance_panel(report: ComplianceReport, console: Console) -> None:
@@ -496,7 +560,13 @@ def render_debate_transcript(transcript: DebateTranscript, console: Console) -> 
         f"Challenges Raised: {transcript.challenges_count}  |  "
         f"Concessions: {transcript.concessions_count}"
     )
-    console.print(Panel(panel_text, title="Autonomous Multi-Agent Deliberation & Debate", border_style=verdict_color))
+    console.print(
+        Panel(
+            panel_text,
+            title="Autonomous Multi-Agent Deliberation & Debate",
+            border_style=verdict_color,
+        )
+    )
 
     for rnd in transcript.rounds:
         round_table = Table(
@@ -627,7 +697,9 @@ def render_diff_table(
 ) -> None:
     """Render differences between two revisions of a deal."""
     if not diffs:
-        console.print(f"[yellow]No parameter differences found between Revision {rev_a} and Revision {rev_b} for deal '{deal_id}'.[/yellow]")
+        console.print(
+            f"[yellow]No parameter differences found between Revision {rev_a} and Revision {rev_b} for deal '{deal_id}'.[/yellow]"
+        )
         return
 
     table = Table(

@@ -35,7 +35,13 @@ def test_full_deal_underwriting_lifecycle():
 
     # 2. Agent reports
     assert len(result.agent_reports) >= 5
-    for role_name in ("acquisition", "market_comps", "debt_financing", "cash_flow", "risk_simulation"):
+    for role_name in (
+        "acquisition",
+        "market_comps",
+        "debt_financing",
+        "cash_flow",
+        "risk_simulation",
+    ):
         assert role_name in result.agent_reports
         rep = result.agent_reports[role_name]
         assert rep.confidence_score > 0.5
