@@ -421,6 +421,21 @@ def test_cli_deal_subcommands(tmp_path: Path):
     assert res_diff.exit_code == 0
     assert "No parameter differences found" in res_diff.output
 
+    # Create second revision to test diff rendering
+    repo = DealRepository()
+    deal_mod = repo.get_deal("phoenix-industrial")
+    if deal_mod:
+        deal_mod.purchase_price = 3_500_000.0
+        repo.create_revision(deal_mod, author="analyst_jane", change_summary="Price reduction")
+
+    res_diff2 = runner.invoke(
+        cli,
+        ["deal", "diff", "--deal-id", "phoenix-industrial", "--rev1", "1", "--rev2", "2"],
+    )
+    assert res_diff2.exit_code == 0
+    assert "Revision Diff:" in res_diff2.output
+    assert "Purchase Price" in res_diff2.output
+
     # 5. Revert revision
     res_rev = runner.invoke(cli, ["deal", "revert", "--deal-id", "phoenix-industrial", "--rev", "1"])
     assert res_rev.exit_code == 0
