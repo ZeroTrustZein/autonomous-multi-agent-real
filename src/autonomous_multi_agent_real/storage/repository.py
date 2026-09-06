@@ -207,6 +207,22 @@ class DealRepository:
         for deal in get_benchmark_deals():
             self._deals[deal.id] = deal
 
+        # Load persisted deals and portfolios from disk if present
+        if self.storage_dir.exists():
+            for f in self.storage_dir.glob("deal_*.json"):
+                try:
+                    data = json.loads(f.read_text(encoding="utf-8"))
+                    d = PropertyDeal.model_validate(data)
+                    self._deals[d.id] = d
+                except Exception:
+                    pass
+            for f in self.storage_dir.glob("portfolio_*.json"):
+                try:
+                    p_data = json.loads(f.read_text(encoding="utf-8"))
+                    self._portfolios[p_data["id"]] = p_data
+                except Exception:
+                    pass
+
     def list_deals(self) -> List[PropertyDeal]:
         """Return all available property deals."""
         return list(self._deals.values())
@@ -235,6 +251,9 @@ class DealRepository:
                 path = self.storage_dir / f"deal_{deal_id}.json"
                 if path.exists():
                     path.unlink()
+                path_rev = self.storage_dir / f"revisions_{deal_id}.json"
+                if path_rev.exists():
+                    path_rev.unlink()
             except OSError:
                 pass
             return True
@@ -298,7 +317,7 @@ class DealRepository:
         change_summary: str = "Assumptions update",
     ) -> DealRevision:
         """Create a versioned snapshot of the deal state."""
-        revs = self._revisions.setdefault(deal.id, [])
+        revs = self.get_revisions(deal.id)
         rev_num = len(revs) + 1
         revision = DealRevision(
             deal_id=deal.id,
@@ -308,17 +327,33 @@ class DealRepository:
             deal_snapshot=deal.model_copy(deep=True),
         )
         revs.append(revision)
-        # Also update current deal
+        self._revisions[deal.id] = revs
         self.save_deal(deal)
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            path = self.storage_dir / f"revisions_{deal.id}.json"
+            path.write_text(
+                json.dumps([r.model_dump(mode="json") for r in revs], indent=2), encoding="utf-8"
+            )
+        except OSError:
+            pass
         return revision
 
     def get_revisions(self, deal_id: str) -> List[DealRevision]:
         """Get complete revision history for a deal."""
+        if deal_id not in self._revisions and self.storage_dir.exists():
+            path = self.storage_dir / f"revisions_{deal_id}.json"
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    self._revisions[deal_id] = [DealRevision.model_validate(item) for item in data]
+                except Exception:
+                    pass
         return list(self._revisions.get(deal_id, []))
 
     def revert_to_revision(self, deal_id: str, revision_number: int) -> Optional[PropertyDeal]:
         """Revert deal to a prior revision state."""
-        revs = self._revisions.get(deal_id, [])
+        revs = self.get_revisions(deal_id)
         for r in revs:
             if r.revision_number == revision_number:
                 restored = r.deal_snapshot.model_copy(deep=True)
