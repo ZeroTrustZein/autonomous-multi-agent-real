@@ -11,6 +11,17 @@ from autonomous_multi_agent_real.agents import (
     MarketCompsAgent,
     RiskMonteCarloAgent,
 )
+from autonomous_multi_agent_real.collaboration import (
+    AgentChallenge,
+    AgentMessage,
+    Blackboard,
+    DebateRound,
+    DebateTranscript,
+    DeliberationEngine,
+    DeliberationTopic,
+    MessageBus,
+    MessageType,
+)
 from autonomous_multi_agent_real.engine import (
     DealOptimizer,
     DealPipeline,
@@ -21,8 +32,30 @@ from autonomous_multi_agent_real.engine import (
     WaterfallEngine,
     get_default_waterfall_structure,
 )
+from autonomous_multi_agent_real.portfolio import (
+    PortfolioDealAllocation,
+    PortfolioManager,
+    PortfolioRiskProfile,
+    PortfolioRollup,
+    PortfolioStressResult,
+    PortfolioStressScenario,
+)
+from autonomous_multi_agent_real.reporting import (
+    DataExporter,
+    InvestmentMemoGenerator,
+)
+from autonomous_multi_agent_real.rules import (
+    ComplianceReport,
+    RuleCategory,
+    RuleDefinition,
+    RuleEngine,
+    RuleEvaluationResult,
+    RuleSeverity,
+    get_default_institutional_rules,
+)
 from autonomous_multi_agent_real.storage import (
     DealRepository,
+    DealRevision,
     get_benchmark_deals,
 )
 from autonomous_multi_agent_real.types import (
@@ -70,7 +103,32 @@ __all__ = [
     "TaxEngine",
     "DealOptimizer",
     "DealRepository",
+    "DealRevision",
     "get_benchmark_deals",
+    "MessageType",
+    "AgentMessage",
+    "MessageBus",
+    "Blackboard",
+    "DeliberationTopic",
+    "AgentChallenge",
+    "DebateRound",
+    "DebateTranscript",
+    "DeliberationEngine",
+    "RuleSeverity",
+    "RuleCategory",
+    "RuleDefinition",
+    "RuleEvaluationResult",
+    "ComplianceReport",
+    "RuleEngine",
+    "get_default_institutional_rules",
+    "PortfolioDealAllocation",
+    "PortfolioRollup",
+    "PortfolioStressScenario",
+    "PortfolioStressResult",
+    "PortfolioRiskProfile",
+    "PortfolioManager",
+    "InvestmentMemoGenerator",
+    "DataExporter",
     "AgentAnalysisReport",
     "AgentDecisionStatus",
     "AgentRole",

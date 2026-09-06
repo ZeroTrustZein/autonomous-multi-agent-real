@@ -1,9 +1,14 @@
-"""Persistence repository for properties, underwriting deals, and results."""
+"""Persistence repository for properties, underwriting deals, revisions, and results."""
 
 from __future__ import annotations
 
+import json
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from autonomous_multi_agent_real.types import (
     FinancingTerms,
@@ -13,6 +18,20 @@ from autonomous_multi_agent_real.types import (
     UnderwritingResult,
     UnitMixItem,
 )
+
+
+class DealRevision(BaseModel):
+    """Audit snapshot of a deal at a specific revision point."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    revision_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    deal_id: str
+    revision_number: int
+    author: str
+    change_summary: str
+    deal_snapshot: PropertyDeal
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 def get_benchmark_deals() -> List[PropertyDeal]:
@@ -175,12 +194,14 @@ def get_benchmark_deals() -> List[PropertyDeal]:
 
 
 class DealRepository:
-    """Storage manager for property deal templates and underwriting results."""
+    """Storage manager for property deal templates, underwriting results, revisions, and portfolios."""
 
     def __init__(self, storage_dir: Optional[Path] = None):
         self.storage_dir = storage_dir or Path("./deals_data")
         self._deals: Dict[str, PropertyDeal] = {}
         self._results: Dict[str, UnderwritingResult] = {}
+        self._revisions: Dict[str, List[DealRevision]] = {}
+        self._portfolios: Dict[str, Dict[str, Any]] = {}
 
         # Seed in-memory cache with benchmark deals
         for deal in get_benchmark_deals():
@@ -204,6 +225,56 @@ class DealRepository:
         except OSError:
             pass
 
+    def delete_deal(self, deal_id: str) -> bool:
+        """Delete deal from repository and disk."""
+        if deal_id in self._deals:
+            del self._deals[deal_id]
+            self._results.pop(deal_id, None)
+            self._revisions.pop(deal_id, None)
+            try:
+                path = self.storage_dir / f"deal_{deal_id}.json"
+                if path.exists():
+                    path.unlink()
+            except OSError:
+                pass
+            return True
+        return False
+
+    def query_deals(
+        self,
+        property_type: Optional[PropertyType] = None,
+        min_units: Optional[int] = None,
+        max_units: Optional[int] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        min_occupancy: Optional[float] = None,
+        search_text: Optional[str] = None,
+    ) -> List[PropertyDeal]:
+        """Filter deals across multiple criteria."""
+        results = list(self._deals.values())
+
+        if property_type is not None:
+            results = [d for d in results if d.property_type == property_type]
+        if min_units is not None:
+            results = [d for d in results if d.total_units >= min_units]
+        if max_units is not None:
+            results = [d for d in results if d.total_units <= max_units]
+        if min_price is not None:
+            results = [d for d in results if d.purchase_price >= min_price]
+        if max_price is not None:
+            results = [d for d in results if d.purchase_price <= max_price]
+        if min_occupancy is not None:
+            results = [d for d in results if d.current_occupancy_pct >= min_occupancy]
+        if search_text is not None:
+            st = search_text.lower()
+            results = [
+                d
+                for d in results
+                if st in d.title.lower() or st in d.address.lower() or st in d.id.lower()
+            ]
+
+        return results
+
     def save_result(self, result: UnderwritingResult) -> None:
         """Store underwriting result."""
         self._results[result.deal_id] = result
@@ -217,3 +288,101 @@ class DealRepository:
     def get_result(self, deal_id: str) -> Optional[UnderwritingResult]:
         """Retrieve underwriting result by deal ID."""
         return self._results.get(deal_id)
+
+    # ------------------ Revision Tracking ------------------
+
+    def create_revision(
+        self,
+        deal: PropertyDeal,
+        author: str = "analyst",
+        change_summary: str = "Assumptions update",
+    ) -> DealRevision:
+        """Create a versioned snapshot of the deal state."""
+        revs = self._revisions.setdefault(deal.id, [])
+        rev_num = len(revs) + 1
+        revision = DealRevision(
+            deal_id=deal.id,
+            revision_number=rev_num,
+            author=author,
+            change_summary=change_summary,
+            deal_snapshot=deal.model_copy(deep=True),
+        )
+        revs.append(revision)
+        # Also update current deal
+        self.save_deal(deal)
+        return revision
+
+    def get_revisions(self, deal_id: str) -> List[DealRevision]:
+        """Get complete revision history for a deal."""
+        return list(self._revisions.get(deal_id, []))
+
+    def revert_to_revision(self, deal_id: str, revision_number: int) -> Optional[PropertyDeal]:
+        """Revert deal to a prior revision state."""
+        revs = self._revisions.get(deal_id, [])
+        for r in revs:
+            if r.revision_number == revision_number:
+                restored = r.deal_snapshot.model_copy(deep=True)
+                self.save_deal(restored)
+                return restored
+        return None
+
+    def diff_revisions(
+        self, deal_id: str, rev_a_num: int, rev_b_num: int
+    ) -> Dict[str, Dict[str, Any]]:
+        """Compute differences in key metrics between two revisions."""
+        revs = {r.revision_number: r.deal_snapshot for r in self.get_revisions(deal_id)}
+        deal_a = revs.get(rev_a_num)
+        deal_b = revs.get(rev_b_num)
+
+        if not deal_a or not deal_b:
+            return {}
+
+        diffs: Dict[str, Dict[str, Any]] = {}
+        fields = [
+            "purchase_price",
+            "rehab_budget",
+            "current_occupancy_pct",
+            "market_occupancy_pct",
+            "annual_rent_growth_pct",
+            "annual_expense_growth_pct",
+            "hold_period_years",
+            "exit_cap_rate",
+        ]
+        for f in fields:
+            val_a = getattr(deal_a, f)
+            val_b = getattr(deal_b, f)
+            if val_a != val_b:
+                diffs[f] = {"rev_a": val_a, "rev_b": val_b}
+
+        return diffs
+
+    # ------------------ Portfolio Storage ------------------
+
+    def save_portfolio(
+        self,
+        portfolio_id: str,
+        name: str,
+        deal_ids: List[str],
+    ) -> None:
+        """Store a portfolio configuration."""
+        data = {
+            "id": portfolio_id,
+            "name": name,
+            "deal_ids": deal_ids,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._portfolios[portfolio_id] = data
+        try:
+            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            path = self.storage_dir / f"portfolio_{portfolio_id}.json"
+            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+
+    def get_portfolio(self, portfolio_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve portfolio configuration."""
+        return self._portfolios.get(portfolio_id)
+
+    def list_portfolios(self) -> List[Dict[str, Any]]:
+        """List all stored portfolios."""
+        return list(self._portfolios.values())

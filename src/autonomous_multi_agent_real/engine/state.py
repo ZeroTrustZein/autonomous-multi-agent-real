@@ -38,6 +38,8 @@ class DealWorkflowContext(BaseModel):
     breakeven: Optional[BreakevenMetrics] = None
     tax_analysis: Optional[TaxAnalysisResult] = None
     pricing_optimization: Optional[PricingOptimizationResult] = None
+    compliance_report: Optional[Any] = None
+    debate_transcript: Optional[Any] = None
     audit_events: List[Dict[str, Any]] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
 

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Optional
+
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from autonomous_multi_agent_real.engine.workflow import DealPipeline
+from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
+from autonomous_multi_agent_real.reporting.exporter import DataExporter
+from autonomous_multi_agent_real.reporting.memo import InvestmentMemoGenerator
+from autonomous_multi_agent_real.rules.engine import RuleEngine
 from autonomous_multi_agent_real.storage.repository import DealRepository
 from autonomous_multi_agent_real.types import (
     FinancingTerms,
@@ -309,3 +316,178 @@ def quick_underwrite(price: float, units: int, sqft: float, rent: float, market_
             title="Quick Underwriting Summary",
         )
     )
+
+
+@cli.command(name="audit")
+@click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal to audit.")
+def audit_deal(deal_id: str):
+    """Run institutional credit policy compliance audit on a deal."""
+    repo = DealRepository()
+    deal = repo.get_deal(deal_id)
+    if not deal:
+        console.print(f"[red]Error: Deal '{deal_id}' not found.[/red]")
+        raise click.Abort()
+
+    pipeline = DealPipeline(monte_carlo_iterations=200)
+    result = pipeline.run(deal)
+
+    report = result.compliance_report
+    if not report:
+        engine = RuleEngine()
+        from autonomous_multi_agent_real.engine.state import DealWorkflowContext
+
+        ctx = DealWorkflowContext(
+            deal=deal,
+            debt_sizing=result.debt_sizing,
+            deal_metrics=result.deal_metrics,
+            monte_carlo=result.monte_carlo,
+        )
+        report = engine.evaluate(ctx)
+
+    status_color = "green" if report.is_compliant else "red"
+    console.print(
+        Panel(
+            f"Deal: [bold cyan]{deal.title}[/bold cyan] ({deal.address})\n"
+            f"Compliance Score: [bold]{report.compliance_score:.1f}%[/bold] ({report.passed_count}/{report.rules_checked} Rules Satisfied)\n"
+            f"Errors: [{status_color}]{report.error_count}[/{status_color}] | Warnings: [yellow]{report.warning_count}[/yellow]\n"
+            f"Overall Status: [bold {status_color}]{'COMPLIANT' if report.is_compliant else 'NON-COMPLIANT'}[/bold {status_color}]",
+            title="Credit Policy Compliance Audit",
+            border_style=status_color,
+        )
+    )
+
+    table = Table(title="Policy Rule Breakdown", show_header=True, header_style="bold blue")
+    table.add_column("Rule", style="white")
+    table.add_column("Status", justify="center")
+    table.add_column("Actual", justify="right")
+    table.add_column("Threshold", justify="right")
+    table.add_column("Remediation", style="yellow")
+
+    for r in report.results:
+        color = "green" if r.passed else "red" if r.severity.value == "error" else "yellow"
+        badge = f"[{color}]{'PASS' if r.passed else r.severity.value.upper()}[/{color}]"
+        table.add_row(
+            r.rule_name,
+            badge,
+            f"{r.actual_value:.3f}",
+            f"{r.operator} {r.threshold_value:.3f}",
+            r.remediation or "-",
+        )
+
+    console.print(table)
+
+
+@cli.command(name="portfolio")
+def portfolio_summary():
+    """Underwrite and roll up all benchmark deals into a consolidated portfolio."""
+    mgr = PortfolioManager()
+    repo = DealRepository()
+    for deal in repo.list_deals():
+        mgr.add_deal(deal)
+
+    console.print("[cyan]Underwriting portfolio deals...[/cyan]")
+    rollup = mgr.generate_rollup()
+    risk = mgr.calculate_risk_profile()
+
+    console.print(
+        Panel(
+            f"Portfolio: [bold cyan]{rollup.portfolio_name}[/bold cyan]\n"
+            f"Total Assets: [bold]{rollup.deal_count}[/bold] ({rollup.total_units} Units, {rollup.total_gross_square_feet:,.0f} SqFt)\n"
+            f"Total Capitalization: [bold]${rollup.total_purchase_price:,.0f}[/bold] | Equity: [bold]${rollup.total_equity_invested:,.0f}[/bold] | Debt: [bold]${rollup.total_debt_funded:,.0f}[/bold]\n"
+            f"Portfolio Levered IRR: [bold green]{rollup.portfolio_levered_irr:.2%}[/bold green] | Equity Multiple: [bold green]{rollup.portfolio_equity_multiple:.2f}x[/bold green]\n"
+            f"Weighted LTV: [bold]{rollup.weighted_ltv:.1%}[/bold] | Weighted DSCR: [bold]{rollup.weighted_dscr:.2f}x[/bold]\n"
+            f"Diversification: [bold]{risk.diversification_rating}[/bold] (HHI: {risk.hhi_concentration_index:.0f})",
+            title="Portfolio Investment Summary",
+        )
+    )
+
+    # Asset Table
+    asset_table = Table(
+        title="Portfolio Asset Allocations", show_header=True, header_style="bold magenta"
+    )
+    asset_table.add_column("Deal ID", style="cyan")
+    asset_table.add_column("Property Type")
+    asset_table.add_column("Purchase Price", justify="right")
+    asset_table.add_column("Equity Allocated", justify="right")
+    asset_table.add_column("Levered IRR", justify="right", style="bold green")
+    asset_table.add_column("Multiple", justify="right")
+    asset_table.add_column("Weight", justify="right")
+
+    for a in rollup.allocations:
+        asset_table.add_row(
+            a.deal_id,
+            a.property_type,
+            f"${a.purchase_price:,.0f}",
+            f"${a.equity_allocated:,.0f}",
+            f"{a.levered_irr:.1%}",
+            f"{a.equity_multiple:.2f}x",
+            f"{a.weight_by_equity:.1%}",
+        )
+
+    console.print(asset_table)
+
+
+@cli.command(name="memo")
+@click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
+@click.option("--out", "-o", default=None, help="Output markdown file path.")
+def generate_memo_cmd(deal_id: str, out: Optional[str]):
+    """Generate executive investment committee memorandum in Markdown."""
+    repo = DealRepository()
+    deal = repo.get_deal(deal_id)
+    if not deal:
+        console.print(f"[red]Error: Deal '{deal_id}' not found.[/red]")
+        raise click.Abort()
+
+    pipeline = DealPipeline(monte_carlo_iterations=500)
+    result = pipeline.run(deal)
+
+    memo_gen = InvestmentMemoGenerator()
+    memo = memo_gen.generate_memo(
+        deal=deal, result=result, compliance_report=result.compliance_report
+    )
+
+    if out:
+        out_path = Path(out)
+        out_path.write_text(memo, encoding="utf-8")
+        console.print(f"[green]Investment memo saved to: {out_path.resolve()}[/green]")
+    else:
+        console.print(memo)
+
+
+@cli.command(name="export")
+@click.option("--deal-id", "-d", default="austin-multifamily", help="ID of deal.")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["cashflow", "waterfall", "sensitivity", "json"]),
+    default="cashflow",
+    help="Export format.",
+)
+@click.option("--out", "-o", default=None, help="Output file path.")
+def export_data_cmd(deal_id: str, format: str, out: Optional[str]):
+    """Export deal underwriting data to CSV or JSON."""
+    repo = DealRepository()
+    deal = repo.get_deal(deal_id)
+    if not deal:
+        console.print(f"[red]Error: Deal '{deal_id}' not found.[/red]")
+        raise click.Abort()
+
+    pipeline = DealPipeline(monte_carlo_iterations=200)
+    result = pipeline.run(deal)
+
+    exporter = DataExporter()
+    if format == "cashflow":
+        content = exporter.export_cashflows_csv(result)
+    elif format == "waterfall":
+        content = exporter.export_waterfall_csv(result)
+    elif format == "sensitivity":
+        content = exporter.export_sensitivity_csv(result)
+    else:
+        content = exporter.export_underwriting_json(result)
+
+    if out:
+        out_path = Path(out)
+        out_path.write_text(content, encoding="utf-8")
+        console.print(f"[green]Data successfully exported to: {out_path.resolve()}[/green]")
+    else:
+        console.print(content)

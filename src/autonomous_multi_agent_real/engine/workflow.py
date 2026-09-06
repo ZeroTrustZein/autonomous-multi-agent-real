@@ -118,6 +118,25 @@ class DealPipeline:
         risk_report = self.risk_agent.analyze(context)
         context.add_agent_report(risk_report)
 
+        # Multi-Agent Deliberation & Cross-Agent Challenge Protocol
+        from autonomous_multi_agent_real.collaboration.debate import DeliberationEngine
+        from autonomous_multi_agent_real.rules.engine import RuleEngine
+
+        deliberation_engine = DeliberationEngine()
+        context.debate_transcript = deliberation_engine.conduct_deliberation(context)
+        context.record_event(
+            "deliberation_complete",
+            f"Deliberation concluded with {context.debate_transcript.challenges_count} challenges",
+        )
+
+        # Institutional Compliance & Credit Policy Audit
+        rule_engine = RuleEngine()
+        context.compliance_report = rule_engine.evaluate(context)
+        context.record_event(
+            "compliance_complete",
+            f"Compliance audit: {context.compliance_report.passed_count}/{context.compliance_report.rules_checked} rules passed",
+        )
+
         # Stage 6: Investment Committee Consensus
         context.current_stage = WorkflowStage.COMMITTEE_SYNTHESIS
         context.record_event("stage_start", "Formulating Investment Committee consensus memorandum")
@@ -186,6 +205,8 @@ class DealPipeline:
             breakeven=context.breakeven,
             tax_analysis=context.tax_analysis,
             pricing_optimization=context.pricing_optimization,
+            compliance_report=context.compliance_report,
+            debate_transcript=context.debate_transcript,
         )
 
     async def run_async(self, deal: PropertyDeal) -> UnderwritingResult:
