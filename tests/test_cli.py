@@ -463,3 +463,151 @@ def test_cli_interactive_features():
     assert "Private Equity Waterfall Distribution Summary" in res.output
     assert "Portfolio Investment Summary" in res.output
     assert "Exiting interactive session." in res.output
+
+
+def test_cli_interactive_comprehensive_commands():
+    """Verify interactive wizard for full underwriting, sim, sens, tax, opt, audit, debate."""
+    runner = CliRunner()
+    # Sequence of commands through interactive menu:
+    # 2 (underwrite), austin-multifamily, 100
+    # 3 (simulate), austin-multifamily, 100
+    # 5 (sensitivity), austin-multifamily
+    # 6 (tax), austin-multifamily, y (cost-seg)
+    # 7 (optimize rent), austin-multifamily, 0.15, rent
+    # 7 (optimize price), austin-multifamily, 0.15, price
+    # 8 (audit), austin-multifamily
+    # 9 (debate), austin-multifamily
+    # 99 (invalid choice)
+    # 1 (inspect with non-existent deal)
+    # 0 (exit)
+    interactive_stream = (
+        "2\naustin-multifamily\n100\n"
+        "3\naustin-multifamily\n100\n"
+        "5\naustin-multifamily\n"
+        "6\naustin-multifamily\ny\n"
+        "7\naustin-multifamily\n0.15\nrent\n"
+        "7\naustin-multifamily\n0.15\nprice\n"
+        "8\naustin-multifamily\n"
+        "9\naustin-multifamily\n"
+        "99\n"
+        "1\nnon-existent-deal\n"
+        "0\n"
+    )
+    res = runner.invoke(cli, ["interactive"], input=interactive_stream)
+    assert res.exit_code == 0
+    assert "Investment Committee Memorandum" in res.output
+    assert "Monte Carlo Stochastic Stress Test" in res.output
+    assert "Levered IRR Sensitivity" in res.output
+    assert "Real Estate Tax Analysis" in res.output
+    assert "Required Market Rent Solution" in res.output
+    assert "Deal Pricing & Hurdle Return Optimizer" in res.output
+    assert "Autonomous Multi-Agent Deliberation & Debate" in res.output
+    assert "Unknown option" in res.output
+    assert "Deal 'non-existent-deal' not found." in res.output
+
+
+def test_cli_error_handling_and_fallback_branches(tmp_path: Path):
+    """Verify error branches for invalid deals, JSON flags, and command fallbacks."""
+    runner = CliRunner()
+
+    # 1. Underwrite with nonexistent deal
+    res_uw = runner.invoke(cli, ["underwrite", "--deal-id", "non-existent-deal"])
+    assert res_uw.exit_code != 0
+    assert "not found" in res_uw.output
+
+    # 2. Simulate with nonexistent deal
+    res_sim = runner.invoke(cli, ["simulate", "--deal-id", "non-existent-deal"])
+    assert res_sim.exit_code != 0
+    assert "not found" in res_sim.output
+
+    # 3. Waterfall with nonexistent deal
+    res_wf = runner.invoke(cli, ["waterfall", "--deal-id", "non-existent-deal"])
+    assert res_wf.exit_code != 0
+    assert "not found" in res_wf.output
+
+    # 4. Sensitivity with nonexistent deal
+    res_sens = runner.invoke(cli, ["sensitivity", "--deal-id", "non-existent-deal"])
+    assert res_sens.exit_code != 0
+    assert "not found" in res_sens.output
+
+    # 5. Tax with nonexistent deal
+    res_tax = runner.invoke(cli, ["tax", "--deal-id", "non-existent-deal"])
+    assert res_tax.exit_code != 0
+    assert "not found" in res_tax.output
+
+    # 6. Optimize with mode="rent" and --json
+    res_opt_rent_json = runner.invoke(
+        cli,
+        ["optimize", "--deal-id", "austin-multifamily", "--mode", "rent", "--json"],
+    )
+    assert res_opt_rent_json.exit_code == 0
+    data_rent = json.loads(res_opt_rent_json.output)
+    assert "required_avg_market_rent" in data_rent
+
+    # Optimize with nonexistent deal
+    res_opt_none = runner.invoke(cli, ["optimize", "--deal-id", "non-existent-deal"])
+    assert res_opt_none.exit_code != 0
+
+    # 7. Audit with nonexistent deal and --json
+    res_audit_none = runner.invoke(cli, ["audit", "--deal-id", "non-existent-deal"])
+    assert res_audit_none.exit_code != 0
+
+    res_audit_json = runner.invoke(cli, ["audit", "--deal-id", "austin-multifamily", "--json"])
+    assert res_audit_json.exit_code == 0
+    data_audit = json.loads(res_audit_json.output)
+    assert "is_compliant" in data_audit
+    assert "rules_checked" in data_audit
+
+    # 8. Debate with nonexistent deal
+    res_deb_none = runner.invoke(cli, ["debate", "--deal-id", "non-existent-deal"])
+    assert res_deb_none.exit_code != 0
+
+    # 9. Memo with nonexistent deal and memo to file
+    res_memo_none = runner.invoke(cli, ["memo", "--deal-id", "non-existent-deal"])
+    assert res_memo_none.exit_code != 0
+
+    memo_file = tmp_path / "memo.md"
+    res_memo_save = runner.invoke(
+        cli,
+        ["memo", "--deal-id", "austin-multifamily", "-o", str(memo_file), "-i", "50"],
+    )
+    assert res_memo_save.exit_code == 0
+    assert memo_file.exists()
+
+    # 10. Export formats to stdout and nonexistent deal
+    res_exp_none = runner.invoke(cli, ["export", "--deal-id", "non-existent-deal"])
+    assert res_exp_none.exit_code != 0
+
+    res_exp_wf = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily", "-f", "waterfall"])
+    assert res_exp_wf.exit_code == 0
+    assert "Total Distributable Cash" in res_exp_wf.output
+
+    res_exp_sens = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily", "-f", "sensitivity"])
+    assert res_exp_sens.exit_code == 0
+    assert "Rent Growth / Exit Cap" in res_exp_sens.output
+
+    # Export to stdout (default format: cashflow CSV)
+    res_exp_stdout = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily"])
+    assert res_exp_stdout.exit_code == 0
+    assert "Gross Potential Rent" in res_exp_stdout.output
+
+    # Export json to stdout
+    res_exp_json = runner.invoke(cli, ["export", "--deal-id", "austin-multifamily", "-f", "json"])
+    assert res_exp_json.exit_code == 0
+    assert "austin-multifamily" in res_exp_json.output
+
+    # 11. Deal group error paths
+    res_deal_exp_none = runner.invoke(cli, ["deal", "export", "--deal-id", "non-existent-deal", "-o", str(tmp_path / "out.json")])
+    assert res_deal_exp_none.exit_code != 0
+
+    res_deal_del_none = runner.invoke(cli, ["deal", "delete", "--deal-id", "non-existent-deal"])
+    assert "not found" in res_deal_del_none.output
+
+    res_deal_rev_none = runner.invoke(cli, ["deal", "create-revision", "--deal-id", "non-existent-deal"])
+    assert res_deal_rev_none.exit_code != 0
+
+    res_deal_revert_none = runner.invoke(cli, ["deal", "revert", "--deal-id", "austin-multifamily", "--rev", "999"])
+    assert "not found" in res_deal_revert_none.output
+
+    res_deal_rev_empty = runner.invoke(cli, ["deal", "revisions", "--deal-id", "austin-multifamily"])
+    assert res_deal_rev_empty.exit_code == 0

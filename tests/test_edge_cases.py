@@ -41,24 +41,17 @@ from autonomous_multi_agent_real.engine.workflow import DealPipeline
 from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
 from autonomous_multi_agent_real.reporting.exporter import DataExporter
 from autonomous_multi_agent_real.reporting.memo import InvestmentMemoGenerator
-from autonomous_multi_agent_real.rules.engine import RuleEngine
-from autonomous_multi_agent_real.rules.models import RuleCategory, RuleDefinition, RuleSeverity
 from autonomous_multi_agent_real.storage.repository import DealRepository, get_benchmark_deals
 from autonomous_multi_agent_real.types import (
     AgentAnalysisReport,
     AgentDecisionStatus,
     AgentRole,
     DebtSizingResult,
-    FinancingTerms,
     InvestmentDecision,
-    OperatingExpenses,
-    PropertyDeal,
     PropertyType,
-    UnitMixItem,
     WaterfallStructure,
     WaterfallTier,
 )
-
 
 # ============================================================================
 # 1. Financial Engineering Numerical & Boundary Edge Cases
@@ -478,6 +471,7 @@ def test_monte_carlo_edge_cases():
     deal = get_benchmark_deals()[0]
     ctx = DealWorkflowContext(deal=deal)
     DebtAgent().analyze(ctx)
+    assert ctx.debt_sizing is not None
 
     engine1 = MonteCarloEngine(seed=123)
     res1 = engine1.simulate(deal, ctx.debt_sizing, iterations=50)
@@ -523,6 +517,7 @@ def test_sensitivity_custom_steps_and_breakeven():
     ctx = DealWorkflowContext(deal=deal)
     DebtAgent().analyze(ctx)
     CashFlowAgent().analyze(ctx)
+    assert ctx.debt_sizing is not None
 
     engine = SensitivityEngine()
     matrix = engine.generate_cap_vs_rent_growth_matrix(deal, ctx.debt_sizing)
