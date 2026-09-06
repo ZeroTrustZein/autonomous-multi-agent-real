@@ -227,6 +227,10 @@ class DealRepository:
         """Return all available property deals."""
         return list(self._deals.values())
 
+    def _ensure_storage_dir(self) -> None:
+        """Ensure storage directory exists on disk."""
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+
     def get_deal(self, deal_id: str) -> Optional[PropertyDeal]:
         """Retrieve deal by ID."""
         return self._deals.get(deal_id)
@@ -235,7 +239,7 @@ class DealRepository:
         """Store deal in memory and persist to disk if directory configured."""
         self._deals[deal.id] = deal
         try:
-            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            self._ensure_storage_dir()
             path = self.storage_dir / f"deal_{deal.id}.json"
             path.write_text(deal.model_dump_json(indent=2), encoding="utf-8")
         except OSError:
@@ -298,7 +302,7 @@ class DealRepository:
         """Store underwriting result."""
         self._results[result.deal_id] = result
         try:
-            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            self._ensure_storage_dir()
             path = self.storage_dir / f"result_{result.deal_id}.json"
             path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         except OSError:
@@ -330,7 +334,7 @@ class DealRepository:
         self._revisions[deal.id] = revs
         self.save_deal(deal)
         try:
-            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            self._ensure_storage_dir()
             path = self.storage_dir / f"revisions_{deal.id}.json"
             path.write_text(
                 json.dumps([r.model_dump(mode="json") for r in revs], indent=2), encoding="utf-8"
@@ -408,7 +412,7 @@ class DealRepository:
         }
         self._portfolios[portfolio_id] = data
         try:
-            self.storage_dir.mkdir(parents=True, exist_ok=True)
+            self._ensure_storage_dir()
             path = self.storage_dir / f"portfolio_{portfolio_id}.json"
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except OSError:

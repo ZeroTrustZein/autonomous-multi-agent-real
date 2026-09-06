@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from autonomous_multi_agent_real.engine.state import DealWorkflowContext
 from autonomous_multi_agent_real.types import (
@@ -14,7 +14,12 @@ from autonomous_multi_agent_real.types import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from autonomous_multi_agent_real.collaboration.debate import DeliberationEngine
+    from autonomous_multi_agent_real.engine.optimizer import DealOptimizer
+    from autonomous_multi_agent_real.engine.sensitivity import SensitivityEngine
+    from autonomous_multi_agent_real.engine.tax import TaxEngine
+    from autonomous_multi_agent_real.engine.waterfall import WaterfallEngine
+    from autonomous_multi_agent_real.rules.engine import RuleEngine
 
 
 class DealPipeline:
@@ -24,6 +29,12 @@ class DealPipeline:
         self,
         monte_carlo_iterations: int = 1000,
         random_seed: int = 42,
+        rule_engine: Optional[RuleEngine] = None,
+        deliberation_engine: Optional[DeliberationEngine] = None,
+        waterfall_engine: Optional[WaterfallEngine] = None,
+        sensitivity_engine: Optional[SensitivityEngine] = None,
+        tax_engine: Optional[TaxEngine] = None,
+        optimizer: Optional[DealOptimizer] = None,
     ):
         from autonomous_multi_agent_real.agents.acquisition import AcquisitionAgent
         from autonomous_multi_agent_real.agents.cashflow import CashFlowAgent
@@ -31,6 +42,14 @@ class DealPipeline:
         from autonomous_multi_agent_real.agents.debt import DebtAgent
         from autonomous_multi_agent_real.agents.market import MarketCompsAgent
         from autonomous_multi_agent_real.agents.risk import RiskMonteCarloAgent
+        from autonomous_multi_agent_real.collaboration.debate import (
+            DeliberationEngine as DelibEngine,
+        )
+        from autonomous_multi_agent_real.engine.optimizer import DealOptimizer as Optimizer
+        from autonomous_multi_agent_real.engine.sensitivity import SensitivityEngine as SensEngine
+        from autonomous_multi_agent_real.engine.tax import TaxEngine as TxEngine
+        from autonomous_multi_agent_real.engine.waterfall import WaterfallEngine as WfEngine
+        from autonomous_multi_agent_real.rules.engine import RuleEngine as RlEngine
 
         self.acquisition_agent = AcquisitionAgent()
         self.market_agent = MarketCompsAgent()
@@ -38,6 +57,13 @@ class DealPipeline:
         self.cashflow_agent = CashFlowAgent()
         self.risk_agent = RiskMonteCarloAgent(iterations=monte_carlo_iterations, seed=random_seed)
         self.committee_agent = InvestmentCommitteeAgent()
+
+        self.rule_engine = rule_engine or RlEngine()
+        self.deliberation_engine = deliberation_engine or DelibEngine()
+        self.waterfall_engine = waterfall_engine or WfEngine()
+        self.sensitivity_engine = sensitivity_engine or SensEngine()
+        self.tax_engine = tax_engine or TxEngine()
+        self.optimizer = optimizer or Optimizer()
 
     def run(self, deal: PropertyDeal) -> UnderwritingResult:
         """Synchronously execute the full underwriting workflow on a deal."""
@@ -69,36 +95,28 @@ class DealPipeline:
         context.add_agent_report(cashflow_report)
 
         # Execute institutional core calculation engines
-        from autonomous_multi_agent_real.engine.optimizer import DealOptimizer
-        from autonomous_multi_agent_real.engine.sensitivity import SensitivityEngine
-        from autonomous_multi_agent_real.engine.tax import TaxEngine
-        from autonomous_multi_agent_real.engine.waterfall import WaterfallEngine
-
         if context.debt_sizing and context.cash_flows:
             # 4a. GP/LP Equity Waterfall
             net_flows = [cf.net_cash_flow for cf in context.cash_flows]
-            waterfall_engine = WaterfallEngine()
-            context.waterfall = waterfall_engine.calculate(
+            context.waterfall = self.waterfall_engine.calculate(
                 total_equity=context.debt_sizing.equity_required,
                 annual_cash_flows=net_flows,
             )
 
             # 4b. Sensitivity & Breakeven
-            sensitivity_engine = SensitivityEngine()
-            context.breakeven = sensitivity_engine.calculate_breakeven_metrics(
+            context.breakeven = self.sensitivity_engine.calculate_breakeven_metrics(
                 deal=deal,
                 debt_sizing=context.debt_sizing,
             )
-            context.sensitivity = sensitivity_engine.generate_cap_vs_rent_growth_matrix(
+            context.sensitivity = self.sensitivity_engine.generate_cap_vs_rent_growth_matrix(
                 deal=deal,
                 debt_sizing=context.debt_sizing,
             )
 
             # 4c. Tax Depreciation & After-Tax Returns
-            tax_engine = TaxEngine()
             annual_nois = [cf.net_operating_income for cf in context.cash_flows]
             exit_proceeds = context.cash_flows[-1].exit_sale_proceeds if context.cash_flows else 0.0
-            context.tax_analysis = tax_engine.analyze(
+            context.tax_analysis = self.tax_engine.analyze(
                 deal=deal,
                 debt_sizing=context.debt_sizing,
                 annual_nois=annual_nois,
@@ -106,8 +124,7 @@ class DealPipeline:
             )
 
             # 4d. Pricing & Hurdle Optimization
-            optimizer = DealOptimizer()
-            context.pricing_optimization = optimizer.solve_max_offer_price(
+            context.pricing_optimization = self.optimizer.solve_max_offer_price(
                 deal=deal,
                 target_levered_irr=0.15,
             )
@@ -119,19 +136,14 @@ class DealPipeline:
         context.add_agent_report(risk_report)
 
         # Multi-Agent Deliberation & Cross-Agent Challenge Protocol
-        from autonomous_multi_agent_real.collaboration.debate import DeliberationEngine
-        from autonomous_multi_agent_real.rules.engine import RuleEngine
-
-        deliberation_engine = DeliberationEngine()
-        context.debate_transcript = deliberation_engine.conduct_deliberation(context)
+        context.debate_transcript = self.deliberation_engine.conduct_deliberation(context)
         context.record_event(
             "deliberation_complete",
             f"Deliberation concluded with {context.debate_transcript.challenges_count} challenges",
         )
 
         # Institutional Compliance & Credit Policy Audit
-        rule_engine = RuleEngine()
-        context.compliance_report = rule_engine.evaluate(context)
+        context.compliance_report = self.rule_engine.evaluate(context)
         context.record_event(
             "compliance_complete",
             f"Compliance audit: {context.compliance_report.passed_count}/{context.compliance_report.rules_checked} rules passed",
