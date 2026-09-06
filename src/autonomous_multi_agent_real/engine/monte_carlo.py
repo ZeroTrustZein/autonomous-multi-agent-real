@@ -1,14 +1,15 @@
-"""Vectorized Monte Carlo simulation engine for real estate cash flows and returns."""
+"""Vectorized Monte Carlo simulation engine with correlated macro shocks and VaR/CVaR."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 import numpy as np
 
 from autonomous_multi_agent_real.engine.financial import (
     calculate_exit_sale_proceeds,
     calculate_irr,
+    calculate_loan_amortization_schedule,
 )
 from autonomous_multi_agent_real.types import (
     DebtSizingResult,
@@ -18,10 +19,77 @@ from autonomous_multi_agent_real.types import (
 
 
 class MonteCarloEngine:
-    """High-speed stochastic cash flow simulator using NumPy."""
+    """High-speed stochastic cash flow simulator using NumPy with correlated risk factors."""
 
-    def __init__(self, seed: Optional[int] = 42):
+    def __init__(self, seed: Optional[int] = 42, enable_correlated_shocks: bool = True):
         self.rng = np.random.default_rng(seed)
+        self.enable_correlated_shocks = enable_correlated_shocks
+
+    def _generate_correlated_shocks(
+        self,
+        iterations: int,
+        hold_years: int,
+        deal: PropertyDeal,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Generate stochastic macro shocks with empirical correlation structure."""
+        means = np.array(
+            [
+                deal.annual_rent_growth_pct,
+                1.0 - deal.market_occupancy_pct,
+                deal.annual_expense_growth_pct,
+                deal.exit_cap_rate,
+            ]
+        )
+        stds = np.array([0.015, 0.020, 0.010, 0.0075])
+
+        if self.enable_correlated_shocks:
+            # Empirical commercial real estate correlation matrix:
+            # [rent_growth, vacancy_rate, expense_inflation, exit_cap_rate]
+            corr_matrix = np.array(
+                [
+                    [1.00, -0.45, 0.30, -0.35],
+                    [-0.45, 1.00, -0.10, 0.25],
+                    [0.30, -0.10, 1.00, 0.10],
+                    [-0.35, 0.25, 0.10, 1.00],
+                ]
+            )
+            # Cholesky decomposition
+            try:
+                chol = np.linalg.cholesky(corr_matrix)
+            except np.linalg.LinAlgError:
+                chol = np.eye(4)
+        else:
+            chol = np.eye(4)
+
+        # Generate standard normal variates
+        z = self.rng.standard_normal(size=(iterations, hold_years, 4))
+        # Project through Cholesky factor: (iterations, hold_years, 4)
+        correlated_z = np.einsum("ijk,lk->ijl", z, chol)
+
+        rent_growth = np.clip(
+            means[0] + correlated_z[:, :, 0] * stds[0],
+            -0.08,
+            0.15,
+        )
+        vacancy = np.clip(
+            means[1] + correlated_z[:, :, 1] * stds[1],
+            0.02,
+            0.35,
+        )
+        expense_growth = np.clip(
+            means[2] + correlated_z[:, :, 2] * stds[2],
+            -0.02,
+            0.12,
+        )
+
+        # Exit cap shock is evaluated at Year N
+        exit_cap = np.clip(
+            means[3] + correlated_z[:, -1, 3] * stds[3],
+            0.035,
+            0.14,
+        )
+
+        return rent_growth, vacancy, expense_growth, exit_cap
 
     def simulate(
         self,
@@ -41,47 +109,15 @@ class MonteCarloEngine:
         annual_debt_service = debt_sizing.annual_debt_service
         initial_equity = debt_sizing.equity_required
 
-        # 1. Stochastic parameter distributions
-        rent_growth_shocks = self.rng.normal(
-            loc=deal.annual_rent_growth_pct,
-            scale=0.015,
-            size=(iterations, hold_years),
-        )
-        rent_growth_shocks = np.clip(rent_growth_shocks, -0.08, 0.15)
+        # Generate correlated macro shocks
+        (
+            rent_growth_shocks,
+            vacancy_shocks,
+            expense_growth_shocks,
+            exit_cap_shocks,
+        ) = self._generate_correlated_shocks(iterations, hold_years, deal)
 
-        base_vacancy = 1.0 - deal.market_occupancy_pct
-        vacancy_shocks = self.rng.normal(
-            loc=base_vacancy,
-            scale=0.02,
-            size=(iterations, hold_years),
-        )
-        vacancy_shocks = np.clip(vacancy_shocks, 0.02, 0.35)
-
-        expense_growth_shocks = self.rng.normal(
-            loc=deal.annual_expense_growth_pct,
-            scale=0.01,
-            size=(iterations, hold_years),
-        )
-        expense_growth_shocks = np.clip(expense_growth_shocks, -0.02, 0.12)
-
-        exit_cap_shocks = self.rng.normal(
-            loc=deal.exit_cap_rate,
-            scale=0.0075,
-            size=iterations,
-        )
-        exit_cap_shocks = np.clip(exit_cap_shocks, 0.035, 0.14)
-
-        # 2. Simulate cash flows across iterations
-        irrs = np.zeros(iterations, dtype=float)
-        equity_multiples = np.zeros(iterations, dtype=float)
-        dscr_breaches = 0
-
-        # Approximate ending loan balance in Year N for terminal payoff
-        # (Using baseline ending balance from amortization schedule)
-        from autonomous_multi_agent_real.engine.financial import (
-            calculate_loan_amortization_schedule,
-        )
-
+        # Terminal loan balance from schedule
         amort_sched = calculate_loan_amortization_schedule(
             principal=debt_sizing.loan_amount,
             annual_interest_rate=deal.financing.interest_rate,
@@ -90,6 +126,11 @@ class MonteCarloEngine:
             interest_only_months=deal.financing.interest_only_months,
         )
         terminal_loan_balance = amort_sched[-1][2] if amort_sched else 0.0
+
+        # Simulate cash flows across iterations
+        irrs = np.zeros(iterations, dtype=float)
+        equity_multiples = np.zeros(iterations, dtype=float)
+        dscr_breaches = 0
 
         for i in range(iterations):
             cf_stream = [-initial_equity]
@@ -154,14 +195,40 @@ class MonteCarloEngine:
         p10_em = float(np.percentile(equity_multiples, 10))
         p90_em = float(np.percentile(equity_multiples, 90))
 
+        # Value-at-Risk (VaR) and Conditional Value-at-Risk (CVaR / Expected Shortfall)
+        var_95 = float(np.percentile(irrs, 5))
+        cvar_95_tail = irrs[irrs <= var_95]
+        cvar_95 = float(np.mean(cvar_95_tail)) if len(cvar_95_tail) > 0 else var_95
+
+        var_99 = float(np.percentile(irrs, 1))
+        cvar_99_tail = irrs[irrs <= var_99]
+        cvar_99 = float(np.mean(cvar_99_tail)) if len(cvar_99_tail) > 0 else var_99
+
         quantiles = {
-            "p5": round(float(np.percentile(irrs, 5)), 4),
+            "p5": round(var_95, 4),
             "p10": round(p10_irr, 4),
             "p25": round(float(np.percentile(irrs, 25)), 4),
             "p50": round(p50_irr, 4),
             "p75": round(float(np.percentile(irrs, 75)), 4),
             "p90": round(p90_irr, 4),
             "p95": round(float(np.percentile(irrs, 95)), 4),
+        }
+
+        # Sensitivity Variance Attribution (Correlation with IRR)
+        def _calc_corr(x: np.ndarray, y: np.ndarray) -> float:
+            if np.std(x) == 0 or np.std(y) == 0:
+                return 0.0
+            return float(np.corrcoef(x, y)[0, 1])
+
+        mean_rent_shock = np.mean(rent_growth_shocks, axis=1)
+        mean_vac_shock = np.mean(vacancy_shocks, axis=1)
+        mean_exp_shock = np.mean(expense_growth_shocks, axis=1)
+
+        variance_attrib: Dict[str, float] = {
+            "rent_growth_impact": round(_calc_corr(mean_rent_shock, irrs), 3),
+            "vacancy_impact": round(_calc_corr(mean_vac_shock, irrs), 3),
+            "expense_growth_impact": round(_calc_corr(mean_exp_shock, irrs), 3),
+            "exit_cap_rate_impact": round(_calc_corr(exit_cap_shocks, irrs), 3),
         }
 
         return MonteCarloSimulationResult(
@@ -177,4 +244,9 @@ class MonteCarloEngine:
             p10_equity_multiple=round(p10_em, 3),
             p90_equity_multiple=round(p90_em, 3),
             distribution_quantiles=quantiles,
+            var_95_irr=round(var_95, 4),
+            cvar_95_irr=round(cvar_95, 4),
+            var_99_irr=round(var_99, 4),
+            cvar_99_irr=round(cvar_99, 4),
+            variance_attribution=variance_attrib,
         )

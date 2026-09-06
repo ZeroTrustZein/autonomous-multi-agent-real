@@ -10,10 +10,15 @@ from pydantic import BaseModel, Field
 from autonomous_multi_agent_real.types import (
     AgentAnalysisReport,
     AnnualCashFlow,
+    BreakevenMetrics,
     DealMetrics,
     DebtSizingResult,
     MonteCarloSimulationResult,
+    PricingOptimizationResult,
     PropertyDeal,
+    SensitivityMatrix,
+    TaxAnalysisResult,
+    WaterfallResult,
     WorkflowStage,
 )
 
@@ -28,6 +33,11 @@ class DealWorkflowContext(BaseModel):
     cash_flows: List[AnnualCashFlow] = Field(default_factory=list)
     deal_metrics: Optional[DealMetrics] = None
     monte_carlo: Optional[MonteCarloSimulationResult] = None
+    waterfall: Optional[WaterfallResult] = None
+    sensitivity: Optional[SensitivityMatrix] = None
+    breakeven: Optional[BreakevenMetrics] = None
+    tax_analysis: Optional[TaxAnalysisResult] = None
+    pricing_optimization: Optional[PricingOptimizationResult] = None
     audit_events: List[Dict[str, Any]] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
 

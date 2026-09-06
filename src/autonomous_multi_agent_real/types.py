@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -274,6 +274,146 @@ class MonteCarloSimulationResult(BaseModel):
     p10_equity_multiple: float
     p90_equity_multiple: float
     distribution_quantiles: Dict[str, float] = Field(default_factory=dict)
+    var_95_irr: Optional[float] = None
+    cvar_95_irr: Optional[float] = None
+    var_99_irr: Optional[float] = None
+    cvar_99_irr: Optional[float] = None
+    variance_attribution: Dict[str, float] = Field(default_factory=dict)
+
+
+class WaterfallTier(BaseModel):
+    """Tier definition in private equity distribution waterfall."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(..., description="e.g. Return of Capital & Preferred Return, Promote Tier 1")
+    hurdle_irr: float = Field(..., ge=0.0, description="Upper IRR boundary for this hurdle tier")
+    lp_share: float = Field(
+        ..., ge=0.0, le=1.0, description="LP share of distributions in this tier"
+    )
+    gp_share: float = Field(
+        ..., ge=0.0, le=1.0, description="GP share (including promote) in this tier"
+    )
+
+
+class WaterfallStructure(BaseModel):
+    """Full capital structure and hurdle terms for GP/LP waterfall."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    preferred_return_rate: float = Field(
+        0.08, ge=0.0, le=0.30, description="Annual preferred return hurdle"
+    )
+    lp_equity_pct: float = Field(0.90, ge=0.0, le=1.0, description="LP equity share")
+    gp_equity_pct: float = Field(0.10, ge=0.0, le=1.0, description="GP equity share")
+    tiers: List[WaterfallTier] = Field(default_factory=list)
+
+
+class WaterfallYearDistribution(BaseModel):
+    """Yearly waterfall distribution ledger."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    year: int
+    total_distributable_cash: float
+    lp_distribution: float
+    gp_distribution: float
+    gp_promote: float
+    lp_unreturned_capital: float
+    gp_unreturned_capital: float
+
+
+class WaterfallResult(BaseModel):
+    """Comprehensive GP / LP equity waterfall results."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    lp_equity_invested: float
+    gp_equity_invested: float
+    lp_total_distributions: float
+    gp_total_distributions: float
+    gp_total_promote: float
+    lp_irr: float
+    lp_equity_multiple: float
+    gp_irr: float
+    gp_equity_multiple: float
+    annual_distributions: List[WaterfallYearDistribution] = Field(default_factory=list)
+
+
+class SensitivityMatrix(BaseModel):
+    """2-Dimensional stress testing matrix outputs."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    row_parameter: str
+    col_parameter: str
+    row_values: List[float]
+    col_values: List[float]
+    irr_matrix: List[List[float]]
+    equity_multiple_matrix: List[List[float]]
+    min_dscr_matrix: List[List[float]]
+
+
+class BreakevenMetrics(BaseModel):
+    """Operational breakeven points for downside safety analysis."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    breakeven_occupancy_pct: float
+    breakeven_monthly_rent_per_unit: float
+    breakeven_noi_for_debt_service: float
+    margin_of_safety_occupancy_pct: float
+    margin_of_safety_rent_pct: float
+
+
+class TaxScheduleItem(BaseModel):
+    """Single-year depreciation and tax deduction schedule."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    year: int
+    noi: float
+    interest_deduction: float
+    depreciation_deduction: float
+    taxable_income: float
+    tax_liability: float
+    pre_tax_cash_flow: float
+    after_tax_cash_flow: float
+
+
+class TaxAnalysisResult(BaseModel):
+    """Multi-year tax shielding, depreciation recapture, and after-tax returns."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    annual_schedule: List[TaxScheduleItem]
+    total_depreciation_claimed: float
+    accumulated_depreciation_at_sale: float
+    depreciation_recapture_tax: float
+    capital_gains_tax: float
+    total_exit_taxes: float
+    pre_tax_irr: float
+    after_tax_irr: float
+    pre_tax_equity_multiple: float
+    after_tax_equity_multiple: float
+
+
+class PricingOptimizationResult(BaseModel):
+    """Reverse-solved purchase price recommendations based on hurdles."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target_hurdle_irr: float
+    target_min_dscr: float
+    target_min_debt_yield: float
+    max_supportable_purchase_price: float
+    implied_entry_cap_rate: float
+    implied_loan_amount: float
+    implied_equity_required: float
+    current_purchase_price: float
+    pricing_variance: float
+    pricing_variance_pct: float
+    is_overpriced: bool
 
 
 class UnderwritingResult(BaseModel):
@@ -295,3 +435,8 @@ class UnderwritingResult(BaseModel):
     key_risks_and_mitigants: List[Dict[str, str]]
     execution_time_seconds: float
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    waterfall: Optional[WaterfallResult] = None
+    sensitivity: Optional[SensitivityMatrix] = None
+    breakeven: Optional[BreakevenMetrics] = None
+    tax_analysis: Optional[TaxAnalysisResult] = None
+    pricing_optimization: Optional[PricingOptimizationResult] = None

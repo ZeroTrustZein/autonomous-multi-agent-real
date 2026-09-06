@@ -68,6 +68,50 @@ class DealPipeline:
         cashflow_report = self.cashflow_agent.analyze(context)
         context.add_agent_report(cashflow_report)
 
+        # Execute institutional core calculation engines
+        from autonomous_multi_agent_real.engine.optimizer import DealOptimizer
+        from autonomous_multi_agent_real.engine.sensitivity import SensitivityEngine
+        from autonomous_multi_agent_real.engine.tax import TaxEngine
+        from autonomous_multi_agent_real.engine.waterfall import WaterfallEngine
+
+        if context.debt_sizing and context.cash_flows:
+            # 4a. GP/LP Equity Waterfall
+            net_flows = [cf.net_cash_flow for cf in context.cash_flows]
+            waterfall_engine = WaterfallEngine()
+            context.waterfall = waterfall_engine.calculate(
+                total_equity=context.debt_sizing.equity_required,
+                annual_cash_flows=net_flows,
+            )
+
+            # 4b. Sensitivity & Breakeven
+            sensitivity_engine = SensitivityEngine()
+            context.breakeven = sensitivity_engine.calculate_breakeven_metrics(
+                deal=deal,
+                debt_sizing=context.debt_sizing,
+            )
+            context.sensitivity = sensitivity_engine.generate_cap_vs_rent_growth_matrix(
+                deal=deal,
+                debt_sizing=context.debt_sizing,
+            )
+
+            # 4c. Tax Depreciation & After-Tax Returns
+            tax_engine = TaxEngine()
+            annual_nois = [cf.net_operating_income for cf in context.cash_flows]
+            exit_proceeds = context.cash_flows[-1].exit_sale_proceeds if context.cash_flows else 0.0
+            context.tax_analysis = tax_engine.analyze(
+                deal=deal,
+                debt_sizing=context.debt_sizing,
+                annual_nois=annual_nois,
+                exit_gross_proceeds=exit_proceeds,
+            )
+
+            # 4d. Pricing & Hurdle Optimization
+            optimizer = DealOptimizer()
+            context.pricing_optimization = optimizer.solve_max_offer_price(
+                deal=deal,
+                target_levered_irr=0.15,
+            )
+
         # Stage 5: Stochastic Risk & Monte Carlo Modeling
         context.current_stage = WorkflowStage.RISK_MODELING
         context.record_event("stage_start", "Beginning Monte Carlo cash flow stress testing")
@@ -137,6 +181,11 @@ class DealPipeline:
             investment_thesis=thesis,
             key_risks_and_mitigants=risks_and_mitigants,
             execution_time_seconds=round(duration, 3),
+            waterfall=context.waterfall,
+            sensitivity=context.sensitivity,
+            breakeven=context.breakeven,
+            tax_analysis=context.tax_analysis,
+            pricing_optimization=context.pricing_optimization,
         )
 
     async def run_async(self, deal: PropertyDeal) -> UnderwritingResult:
