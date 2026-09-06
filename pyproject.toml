@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autonomous-multi-agent-real"
+version = "0.1.0"
+description = "Autonomous multi-agent real estate deal underwriting and cash flow simulation workflow engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Portfolio Automation" }]
+dependencies = [
+    "numpy>=1.24.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "rich>=12.0.0",
+    "typing_extensions>=4.6.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.8.0",
+    "build>=1.0.0",
+]
+
+[project.scripts]
+autonomous-multi-agent-real = "autonomous_multi_agent_real.cli.main:cli"
+underwrite-real = "autonomous_multi_agent_real.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["autonomous_multi_agent_real*"]
+
+[tool.setuptools.package-data]
+autonomous_multi_agent_real = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["autonomous_multi_agent_real"]
+omit = ["tests/*"]
+
+[tool.mypy]
+mypy_path = "src"
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
