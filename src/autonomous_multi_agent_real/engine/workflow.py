@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from autonomous_multi_agent_real.engine.state import DealWorkflowContext
 from autonomous_multi_agent_real.types import (
@@ -72,7 +72,6 @@ class DealPipeline:
         else:
             self.feature_interceptor = feature_interceptor
 
-
     def run(self, deal: PropertyDeal) -> UnderwritingResult:
         """Synchronously execute the full underwriting workflow on a deal."""
         start_time = time.perf_counter()
@@ -81,26 +80,46 @@ class DealPipeline:
         # Stage 1: Intake & Acquisition Screening
         context.current_stage = WorkflowStage.INTAKE
         context.record_event("stage_start", "Beginning Acquisition Intake screening")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.INTAKE, context)
         acq_report = self.acquisition_agent.analyze(context)
         context.add_agent_report(acq_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(WorkflowStage.INTAKE, context, acq_report)
 
         # Stage 2: Market Comps Analysis
         context.current_stage = WorkflowStage.MARKET_ANALYSIS
         context.record_event("stage_start", "Beginning Market Comps and rent benchmarking")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.MARKET_ANALYSIS, context)
         market_report = self.market_agent.analyze(context)
         context.add_agent_report(market_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(
+                WorkflowStage.MARKET_ANALYSIS, context, market_report
+            )
 
         # Stage 3: Debt Sizing
         context.current_stage = WorkflowStage.DEBT_SIZING
         context.record_event("stage_start", "Beginning Senior Debt Sizing across constraints")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.DEBT_SIZING, context)
         debt_report = self.debt_agent.analyze(context)
         context.add_agent_report(debt_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(WorkflowStage.DEBT_SIZING, context, debt_report)
 
         # Stage 4: Cash Flow Waterfall Simulation
         context.current_stage = WorkflowStage.CASH_FLOW_SIMULATION
         context.record_event("stage_start", "Beginning Pro-Forma Cash Flow and returns modeling")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.CASH_FLOW_SIMULATION, context)
         cashflow_report = self.cashflow_agent.analyze(context)
         context.add_agent_report(cashflow_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(
+                WorkflowStage.CASH_FLOW_SIMULATION, context, cashflow_report
+            )
 
         # Execute institutional core calculation engines
         if context.debt_sizing and context.cash_flows:
@@ -140,8 +159,12 @@ class DealPipeline:
         # Stage 5: Stochastic Risk & Monte Carlo Modeling
         context.current_stage = WorkflowStage.RISK_MODELING
         context.record_event("stage_start", "Beginning Monte Carlo cash flow stress testing")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.RISK_MODELING, context)
         risk_report = self.risk_agent.analyze(context)
         context.add_agent_report(risk_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(WorkflowStage.RISK_MODELING, context, risk_report)
 
         # Multi-Agent Deliberation & Cross-Agent Challenge Protocol
         context.debate_transcript = self.deliberation_engine.conduct_deliberation(context)
@@ -160,8 +183,14 @@ class DealPipeline:
         # Stage 6: Investment Committee Consensus
         context.current_stage = WorkflowStage.COMMITTEE_SYNTHESIS
         context.record_event("stage_start", "Formulating Investment Committee consensus memorandum")
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_start(WorkflowStage.COMMITTEE_SYNTHESIS, context)
         comm_report = self.committee_agent.analyze(context)
         context.add_agent_report(comm_report)
+        if self.feature_interceptor:
+            self.feature_interceptor.on_stage_end(
+                WorkflowStage.COMMITTEE_SYNTHESIS, context, comm_report
+            )
 
         context.current_stage = WorkflowStage.COMPLETED
         context.record_event(
@@ -206,7 +235,7 @@ class DealPipeline:
             f"Equity required: ${debt_sizing.equity_required:,.0f}."
         )
 
-        return UnderwritingResult(
+        result = UnderwritingResult(
             deal_id=deal.id,
             deal_title=deal.title,
             decision=decision,
@@ -228,6 +257,11 @@ class DealPipeline:
             compliance_report=context.compliance_report,
             debate_transcript=context.debate_transcript,
         )
+
+        if self.feature_interceptor:
+            self.feature_interceptor.on_workflow_complete(context, result)
+
+        return result
 
     async def run_async(self, deal: PropertyDeal) -> UnderwritingResult:
         """Asynchronous execution wrapper."""

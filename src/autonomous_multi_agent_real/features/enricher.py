@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 from autonomous_multi_agent_real.features.extractor import FeatureExtractor
 from autonomous_multi_agent_real.features.serving import OnlineFeatureStore
@@ -43,8 +43,7 @@ class FeatureContextEnricher:
                 cohort_vectors.append(self.extractor.extract_deal_features(cd))
         elif self.online_store:
             cohort_vectors = [
-                self.online_store.get_vector(k.split(":")[-1])
-                for k in self.online_store.keys()
+                self.online_store.get_vector(k.split(":")[-1]) for k in self.online_store.keys()
             ]
             cohort_vectors = [v for v in cohort_vectors if v is not None]
 

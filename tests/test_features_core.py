@@ -2,31 +2,29 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
-import time
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-import pytest
-import pyarrow as pa
+from datetime import datetime, timedelta, timezone
+from typing import List
 
-from autonomous_multi_agent_real.features.registry import (
-    FeatureRegistry,
-    get_default_registry,
+import pytest
+
+from autonomous_multi_agent_real.features.buffer import (
+    StreamFeatureBuffer,
 )
 from autonomous_multi_agent_real.features.extractor import (
     FeatureExtractor,
     WindowedAggregator,
 )
-from autonomous_multi_agent_real.features.storage import (
-    ParquetFeatureStore,
-)
-from autonomous_multi_agent_real.features.buffer import (
-    StreamFeatureBuffer,
-)
 from autonomous_multi_agent_real.features.quality import (
     FeatureQualityEngine,
+)
+from autonomous_multi_agent_real.features.registry import (
+    FeatureRegistry,
+    get_default_registry,
+)
+from autonomous_multi_agent_real.features.storage import (
+    ParquetFeatureStore,
 )
 from autonomous_multi_agent_real.features.types import (
     FeatureCategory,
@@ -37,12 +35,11 @@ from autonomous_multi_agent_real.features.types import (
     FeatureTimeWindow,
     FeatureVector,
     ParquetPartitionSpec,
-    PartitionStrategy,
     StreamBufferConfig,
 )
 from autonomous_multi_agent_real.types import (
-    DebtSizingResult,
     DealMetrics,
+    DebtSizingResult,
     FinancingTerms,
     MonteCarloSimulationResult,
     OperatingExpenses,
@@ -63,8 +60,20 @@ def sample_property_deal() -> PropertyDeal:
         property_type=PropertyType.MULTI_FAMILY,
         gross_square_feet=45000.0,
         unit_mix=[
-            UnitMixItem(unit_type="1BR", count=30, square_feet=750.0, current_rent=1600.0, market_rent=1800.0),
-            UnitMixItem(unit_type="2BR", count=20, square_feet=1100.0, current_rent=2200.0, market_rent=2500.0),
+            UnitMixItem(
+                unit_type="1BR",
+                count=30,
+                square_feet=750.0,
+                current_rent=1600.0,
+                market_rent=1800.0,
+            ),
+            UnitMixItem(
+                unit_type="2BR",
+                count=20,
+                square_feet=1100.0,
+                current_rent=2200.0,
+                market_rent=2500.0,
+            ),
         ],
         purchase_price=8000000.0,
         rehab_budget=500000.0,
@@ -107,6 +116,7 @@ def temp_store_dir() -> str:
 # ===========================================================================
 # 1. Feature Registry & Catalog Tests
 # ===========================================================================
+
 
 def test_default_registry_initialization():
     """Verify default institutional CRE registry contains required features."""
@@ -226,6 +236,7 @@ def test_registry_vector_validation():
 # 2. Feature Extractor & Streaming Window Aggregations
 # ===========================================================================
 
+
 def test_feature_extractor_from_deal(sample_property_deal):
     """Verify feature extraction directly from a PropertyDeal model."""
     extractor = FeatureExtractor()
@@ -257,7 +268,11 @@ def test_feature_extractor_from_deal_dict():
         "gross_square_feet": 20000.0,
         "total_units": 20,
         "unit_mix": [{"count": 20, "current_rent": 1500.0, "market_rent": 1700.0}],
-        "expenses": {"property_taxes": 60000.0, "insurance": 20000.0, "repairs_and_maintenance": 25000.0},
+        "expenses": {
+            "property_taxes": 60000.0,
+            "insurance": 20000.0,
+            "repairs_and_maintenance": 25000.0,
+        },
     }
     vector = extractor.extract_from_deal(deal_dict)
     assert vector.entity_id == "deal-dict-202"
@@ -404,6 +419,7 @@ def test_extract_from_stream_event():
 # 3. Parquet Feature Store & Columnar Persistence
 # ===========================================================================
 
+
 def test_parquet_feature_store_write_and_query(temp_store_dir):
     """Verify writing feature vectors to Parquet, updating manifest, and querying."""
     store = ParquetFeatureStore(
@@ -481,7 +497,9 @@ def test_parquet_feature_store_as_of_time_travel(temp_store_dir):
     assert as_of_t2.get("noi") == 480000.0
 
     # As-of query before t0: returns None
-    as_of_prior = store.get_as_of_vector("deal-alpha", as_of=datetime(2025, 12, 1, tzinfo=timezone.utc))
+    as_of_prior = store.get_as_of_vector(
+        "deal-alpha", as_of=datetime(2025, 12, 1, tzinfo=timezone.utc)
+    )
     assert as_of_prior is None
 
 
@@ -495,13 +513,17 @@ def test_parquet_feature_store_records_and_compaction(temp_store_dir):
 
     # Write chunk 1
     r1 = [
-        FeatureRecord(entity_id="deal-c1", entity_type="deal", feature_name="irr", value=0.15, timestamp=now),
+        FeatureRecord(
+            entity_id="deal-c1", entity_type="deal", feature_name="irr", value=0.15, timestamp=now
+        ),
     ]
     store.write_records(r1)
 
     # Write chunk 2 (same partition)
     r2 = [
-        FeatureRecord(entity_id="deal-c2", entity_type="deal", feature_name="irr", value=0.18, timestamp=now),
+        FeatureRecord(
+            entity_id="deal-c2", entity_type="deal", feature_name="irr", value=0.18, timestamp=now
+        ),
     ]
     store.write_records(r2)
 
@@ -523,6 +545,7 @@ def test_parquet_feature_store_records_and_compaction(temp_store_dir):
 # 4. Real-time Streaming Feature Buffer
 # ===========================================================================
 
+
 def test_stream_feature_buffer_capacity_flush():
     """Verify streaming buffer auto-flushes when max_records capacity is reached."""
     flushed_batches: List[List[FeatureRecord]] = []
@@ -535,13 +558,25 @@ def test_stream_feature_buffer_capacity_flush():
 
     now = datetime.now(timezone.utc)
     # Add 2 records -> buffer holds them
-    buffer.add_record(FeatureRecord(entity_id="d1", entity_type="deal", feature_name="f1", value=1.0, timestamp=now))
-    buffer.add_record(FeatureRecord(entity_id="d1", entity_type="deal", feature_name="f2", value=2.0, timestamp=now))
+    buffer.add_record(
+        FeatureRecord(
+            entity_id="d1", entity_type="deal", feature_name="f1", value=1.0, timestamp=now
+        )
+    )
+    buffer.add_record(
+        FeatureRecord(
+            entity_id="d1", entity_type="deal", feature_name="f2", value=2.0, timestamp=now
+        )
+    )
     assert len(flushed_batches) == 0
     assert buffer.get_status().records_in_buffer == 2
 
     # Add 3rd record -> triggers auto-flush
-    buffer.add_record(FeatureRecord(entity_id="d1", entity_type="deal", feature_name="f3", value=3.0, timestamp=now))
+    buffer.add_record(
+        FeatureRecord(
+            entity_id="d1", entity_type="deal", feature_name="f3", value=3.0, timestamp=now
+        )
+    )
     assert len(flushed_batches) == 1
     assert len(flushed_batches[0]) == 3
     assert buffer.get_status().records_in_buffer == 0
@@ -607,6 +642,7 @@ def test_stream_feature_buffer_watermark_rejection():
 # ===========================================================================
 # 5. Quality, Profiling & Drift Detection
 # ===========================================================================
+
 
 def test_feature_quality_statistics_calculation():
     """Verify statistical summary generation for numeric and categorical distributions."""

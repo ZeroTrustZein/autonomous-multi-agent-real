@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -51,7 +50,11 @@ class TrainingDataset:
         """Convert split or entire dataset to PyArrow Table."""
         records = self.get_records(split)
         if not records:
-            cols = ["entity_id", "timestamp"] + self.metadata.feature_names + [self.metadata.label_name]
+            cols = (
+                ["entity_id", "timestamp"]
+                + self.metadata.feature_names
+                + [self.metadata.label_name]
+            )
             return pa.schema([pa.field(c, pa.string()) for c in cols]).empty_table()
 
         cols = ["entity_id", "timestamp"] + self.metadata.feature_names + [self.metadata.label_name]
@@ -67,9 +70,7 @@ class TrainingDataset:
 
         return pa.Table.from_arrays(arrays, names=cols)
 
-    def to_xy(
-        self, split: Optional[str] = "train"
-    ) -> Tuple[Dict[str, List[Any]], List[Any]]:
+    def to_xy(self, split: Optional[str] = "train") -> Tuple[Dict[str, List[Any]], List[Any]]:
         """Extract feature matrix (X) and label target vector (y) for machine learning models."""
         records = self.get_records(split)
         X: Dict[str, List[Any]] = {fn: [] for fn in self.metadata.feature_names}
@@ -213,9 +214,7 @@ class TrainingDatasetGenerator:
             joined_records.append(rec)
 
         final_feature_names = (
-            sorted(feature_names)
-            if feature_names is not None
-            else sorted(all_features_observed)
+            sorted(feature_names) if feature_names is not None else sorted(all_features_observed)
         )
 
         # Split data

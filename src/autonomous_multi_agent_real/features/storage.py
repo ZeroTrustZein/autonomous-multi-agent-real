@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +20,7 @@ from autonomous_multi_agent_real.features.types import (
     PartitionStrategy,
     feature_records_to_arrow_table,
     feature_vectors_to_arrow_table,
+    table_to_safe_pydict,
 )
 
 
@@ -241,10 +241,12 @@ class ParquetFeatureStore:
         """Filter and retrieve features as a PyArrow Table."""
         full_table = self.read_all_tables()
         if full_table is None or full_table.num_rows == 0:
-            empty_schema = pa.schema([
-                pa.field("entity_id", pa.string()),
-                pa.field("timestamp", pa.timestamp("ms", tz="UTC")),
-            ])
+            empty_schema = pa.schema(
+                [
+                    pa.field("entity_id", pa.string()),
+                    pa.field("timestamp", pa.timestamp("ms", tz="UTC")),
+                ]
+            )
             return empty_schema.empty_table()
 
         mask = pc.equal(pc.is_null(full_table["entity_id"]), False)
@@ -298,19 +300,7 @@ class ParquetFeatureStore:
         if table.num_rows == 0:
             return None
 
-        # Safe column extraction avoiding Windows zoneinfo missing tzdata
-        pydict: Dict[str, List[Any]] = {}
-        for col_name in table.column_names:
-            col = table[col_name]
-            if pa.types.is_timestamp(col.type):
-                ms_list = pc.cast(col, pa.int64()).to_pylist()
-                pydict[col_name] = [
-                    datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc) if ms is not None else None
-                    for ms in ms_list
-                ]
-            else:
-                pydict[col_name] = col.to_pylist()
-
+        pydict = table_to_safe_pydict(table)
         timestamps = pydict["timestamp"]
         latest_idx = -1
         latest_ts = None

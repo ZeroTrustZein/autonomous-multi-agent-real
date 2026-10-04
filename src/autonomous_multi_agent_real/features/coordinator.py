@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
@@ -20,13 +18,13 @@ from autonomous_multi_agent_real.features.training import TrainingDataset, Train
 from autonomous_multi_agent_real.features.types import (
     EnrichedFeatureContext,
     FeatureQualityReport,
-    FeatureRecord,
     FeatureVector,
     MaterializationJob,
     ObservationTarget,
     OnlineStoreConfig,
     ParquetPartitionSpec,
     StreamBufferConfig,
+    table_to_safe_pydict,
 )
 from autonomous_multi_agent_real.types import PropertyDeal
 
@@ -237,7 +235,7 @@ class FeatureStoreCoordinator:
                 overall_quality_score=1.0,
             )
 
-        pydict = table.to_pydict()
+        pydict = table_to_safe_pydict(table)
         unique_eids = sorted(set(pydict["entity_id"]))
         vectors: List[FeatureVector] = []
         for eid in unique_eids:

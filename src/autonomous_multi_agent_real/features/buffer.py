@@ -5,18 +5,16 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Callable, List, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from autonomous_multi_agent_real.features.types import (
     FeatureRecord,
     FeatureStreamEvent,
-    FeatureStreamStatus,
     FeatureVector,
     StreamBufferConfig,
 )
-
 
 FlushCallback = Callable[[List[FeatureRecord]], None]
 
@@ -121,9 +119,17 @@ class StreamFeatureBuffer:
     def add_event(self, event: FeatureStreamEvent, source: str = "stream_event") -> int:
         """Unpack a FeatureStreamEvent into the buffer."""
         payload = event.payload
-        entity_id = getattr(event, "entity_id", None) or str(payload.get("entity_id") or payload.get("deal_id") or "event_entity")
-        entity_type = getattr(event, "entity_type", None) or str(payload.get("entity_type") or "deal")
-        ts = getattr(event, "event_time", None) or getattr(event, "timestamp", None) or datetime.now(timezone.utc)
+        entity_id = getattr(event, "entity_id", None) or str(
+            payload.get("entity_id") or payload.get("deal_id") or "event_entity"
+        )
+        entity_type = getattr(event, "entity_type", None) or str(
+            payload.get("entity_type") or "deal"
+        )
+        ts = (
+            getattr(event, "event_time", None)
+            or getattr(event, "timestamp", None)
+            or datetime.now(timezone.utc)
+        )
 
         feat_dict = payload.get("features", payload)
         records: List[FeatureRecord] = []
@@ -141,6 +147,18 @@ class StreamFeatureBuffer:
                 )
             )
         return self.add_records(records)
+
+    def push(self, item: Any, source: str = "stream") -> int:
+        """Convenience push method accepting FeatureRecord, FeatureVector, or FeatureStreamEvent."""
+        if isinstance(item, FeatureRecord):
+            return 1 if self.add_record(item) else 0
+        elif isinstance(item, FeatureVector):
+            return self.add_vector(item, source=source)
+        elif isinstance(item, FeatureStreamEvent):
+            return self.add_event(item, source=source)
+        elif isinstance(item, (list, tuple)):
+            return self.add_records(item)
+        return 0
 
     def flush(self) -> int:
         """Explicitly flush all buffered records to sink."""
@@ -183,7 +201,8 @@ class StreamFeatureBuffer:
                 total_flushes=self._total_flushes,
                 dropped_records=self._dropped_records,
                 buffer_utilization=round(utilization, 4),
-                is_healthy=self._dropped_records == 0 or (self._dropped_records / max(1, self._total_ingested) < 0.05),
+                is_healthy=self._dropped_records == 0
+                or (self._dropped_records / max(1, self._total_ingested) < 0.05),
                 last_flush_timestamp=self._last_flush_datetime,
             )
 
@@ -196,3 +215,30 @@ class StreamFeatureBuffer:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
+
+    def push(self, item: Union[FeatureRecord, FeatureVector, FeatureStreamEvent]) -> bool:
+        """Alias for adding record, vector, or stream event."""
+        if isinstance(item, FeatureRecord):
+            return self.add_record(item)
+        elif isinstance(item, FeatureVector):
+            return self.add_vector(item) > 0
+        elif isinstance(item, FeatureStreamEvent):
+            return self.add_event(item) > 0
+        return False
+
+    def drain(self) -> List[FeatureRecord]:
+        """Drain and return all current buffered records without calling flush_sink."""
+        with self._lock:
+            records = list(self._buffer)
+            self._buffer.clear()
+            self._last_flush_time = time.monotonic()
+            self._last_flush_datetime = datetime.now(timezone.utc)
+            self._total_flushed += len(records)
+            self._total_flushes += 1
+            return records
+
+    def size(self) -> int:
+        """Return count of records currently in buffer."""
+        with self._lock:
+            return len(self._buffer)
+

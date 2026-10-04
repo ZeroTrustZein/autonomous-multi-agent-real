@@ -6,10 +6,10 @@ import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 import pyarrow as pa
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class FeatureDataType(str, Enum):
@@ -98,9 +98,7 @@ class FeatureMetadata(BaseModel):
     unit: Optional[str] = Field(
         None, description="Measurement unit (e.g. 'USD', 'ratio', 'bps', 'sqft', 'pct')"
     )
-    window: FeatureTimeWindow = Field(
-        FeatureTimeWindow.REALTIME, description="Aggregation window"
-    )
+    window: FeatureTimeWindow = Field(FeatureTimeWindow.REALTIME, description="Aggregation window")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     min_value: Optional[float] = Field(None, description="Lower bound for quality validation")
     max_value: Optional[float] = Field(None, description="Upper bound for quality validation")
@@ -231,7 +229,9 @@ class ParquetPartitionSpec(BaseModel):
     )
     compression: str = Field("snappy", description="Parquet compression codec (snappy, gzip, zstd)")
     row_group_size: int = Field(10000, gt=0, description="Rows per Parquet row group")
-    dictionary_encoding: bool = Field(True, description="Enable dictionary encoding for low cardinality")
+    dictionary_encoding: bool = Field(
+        True, description="Enable dictionary encoding for low cardinality"
+    )
     enable_statistics: bool = Field(True, description="Calculate min/max column statistics")
 
 
@@ -325,10 +325,12 @@ def feature_vectors_to_arrow_table(
     if not vectors:
         if schema is not None:
             return schema.empty_table()
-        empty_schema = pa.schema([
-            pa.field("entity_id", pa.string(), nullable=False),
-            pa.field("timestamp", pa.timestamp("ms", tz="UTC"), nullable=False),
-        ])
+        empty_schema = pa.schema(
+            [
+                pa.field("entity_id", pa.string(), nullable=False),
+                pa.field("timestamp", pa.timestamp("ms", tz="UTC"), nullable=False),
+            ]
+        )
         return empty_schema.empty_table()
 
     # If schema provided, conform rows to schema
@@ -380,15 +382,17 @@ def feature_records_to_arrow_table(
 ) -> pa.Table:
     """Convert a sequence of atomic FeatureRecord instances into a PyArrow Table."""
     if not records:
-        schema = pa.schema([
-            pa.field("entity_id", pa.string(), nullable=False),
-            pa.field("entity_type", pa.string(), nullable=False),
-            pa.field("feature_name", pa.string(), nullable=False),
-            pa.field("value_str", pa.string(), nullable=True),
-            pa.field("timestamp", pa.timestamp("ms", tz="UTC"), nullable=False),
-            pa.field("source", pa.string(), nullable=False),
-            pa.field("partition_key", pa.string(), nullable=True),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("entity_id", pa.string(), nullable=False),
+                pa.field("entity_type", pa.string(), nullable=False),
+                pa.field("feature_name", pa.string(), nullable=False),
+                pa.field("value_str", pa.string(), nullable=True),
+                pa.field("timestamp", pa.timestamp("ms", tz="UTC"), nullable=False),
+                pa.field("source", pa.string(), nullable=False),
+                pa.field("partition_key", pa.string(), nullable=True),
+            ]
+        )
         return schema.empty_table()
 
     return pa.Table.from_arrays(
@@ -421,6 +425,25 @@ def feature_records_to_arrow_table(
             "partition_key",
         ],
     )
+
+
+def table_to_safe_pydict(table: pa.Table) -> Dict[str, List[Any]]:
+    """Safely convert PyArrow Table to python dict avoiding Windows zoneinfo missing tzdata error."""
+    import pyarrow.compute as pc
+
+    pydict: Dict[str, List[Any]] = {}
+    for col_name in table.column_names:
+        col = table[col_name]
+        if pa.types.is_timestamp(col.type):
+            ms_list = pc.cast(col, pa.int64()).to_pylist()
+            pydict[col_name] = [
+                datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc) if ms is not None else None
+                for ms in ms_list
+            ]
+        else:
+            pydict[col_name] = col.to_pylist()
+    return pydict
+
 
 
 class OnlineStoreConfig(BaseModel):
@@ -494,7 +517,9 @@ class ObservationTarget(BaseModel):
     label_name: str = Field(..., min_length=1, description="Target label name.")
     label_value: Any = Field(..., description="Observed target label value.")
     entity_type: str = Field(default="deal", description="Entity category/type.")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Contextual observation metadata.")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Contextual observation metadata."
+    )
 
 
 class TrainingDatasetMetadata(BaseModel):
@@ -505,7 +530,9 @@ class TrainingDatasetMetadata(BaseModel):
     dataset_name: str = Field(..., min_length=1, description="Dataset name.")
     schema_version: str = Field(default="1.0.0", description="Feature schema version.")
     label_name: str = Field(..., min_length=1, description="Target variable name.")
-    feature_names: List[str] = Field(default_factory=list, description="Ordered feature column names.")
+    feature_names: List[str] = Field(
+        default_factory=list, description="Ordered feature column names."
+    )
     train_count: int = Field(default=0, ge=0, description="Number of training rows.")
     val_count: int = Field(default=0, ge=0, description="Number of validation rows.")
     test_count: int = Field(default=0, ge=0, description="Number of test rows.")
@@ -523,11 +550,16 @@ class EnrichedFeatureContext(BaseModel):
     entity_id: str = Field(..., min_length=1, description="Entity identifier.")
     cohort_name: str = Field(default="all_deals", description="Cohort grouping name.")
     features: Dict[str, Any] = Field(default_factory=dict, description="Raw feature values.")
-    percentiles: Dict[str, float] = Field(default_factory=dict, description="Percentile rankings [0.0 - 1.0].")
-    z_scores: Dict[str, float] = Field(default_factory=dict, description="Z-score normalized metrics.")
-    cohort_medians: Dict[str, float] = Field(default_factory=dict, description="Cohort median reference values.")
+    percentiles: Dict[str, float] = Field(
+        default_factory=dict, description="Percentile rankings [0.0 - 1.0]."
+    )
+    z_scores: Dict[str, float] = Field(
+        default_factory=dict, description="Z-score normalized metrics."
+    )
+    cohort_medians: Dict[str, float] = Field(
+        default_factory=dict, description="Cohort median reference values."
+    )
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Enrichment timestamp.",
     )
-

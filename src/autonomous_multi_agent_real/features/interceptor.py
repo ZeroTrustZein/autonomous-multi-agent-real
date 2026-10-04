@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from autonomous_multi_agent_real.features.buffer import StreamFeatureBuffer
 from autonomous_multi_agent_real.features.extractor import FeatureExtractor
 from autonomous_multi_agent_real.features.serving import OnlineFeatureStore
 from autonomous_multi_agent_real.features.storage import ParquetFeatureStore
 from autonomous_multi_agent_real.features.types import (
-    FeatureRecord,
     FeatureStreamEvent,
-    FeatureVector,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,9 +50,7 @@ class PipelineFeatureInterceptor:
             )
             self.buffer.push(event)
 
-    def on_stage_end(
-        self, stage: Any, context: Any, report: Optional[Any] = None
-    ) -> None:
+    def on_stage_end(self, stage: Any, context: Any, report: Optional[Any] = None) -> None:
         """Invoked when a pipeline stage completes, capturing newly resolved metrics."""
         stage_name = getattr(stage, "value", str(stage))
         deal = getattr(context, "deal", None)

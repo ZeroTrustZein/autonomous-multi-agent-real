@@ -6,12 +6,11 @@ import collections
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 from autonomous_multi_agent_real.features.registry import FeatureRegistry, get_default_registry
 from autonomous_multi_agent_real.features.storage import ParquetFeatureStore
 from autonomous_multi_agent_real.features.types import (
-    FeatureMetadata,
     FeatureRecord,
     FeatureVector,
     OnlineStoreConfig,
@@ -24,7 +23,9 @@ class OnlineFeatureStore:
     def __init__(self, config: Optional[OnlineStoreConfig] = None) -> None:
         self.config = config or OnlineStoreConfig()
         self._lock = threading.RLock()
-        self._store: collections.OrderedDict[str, tuple[FeatureVector, float]] = collections.OrderedDict()
+        self._store: collections.OrderedDict[str, tuple[FeatureVector, float]] = (
+            collections.OrderedDict()
+        )
         self._hits: int = 0
         self._misses: int = 0
         self._evictions: int = 0

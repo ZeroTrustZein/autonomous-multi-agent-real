@@ -35,6 +35,7 @@ class FeatureQualityEngine:
             col = data[feature_name]
             if pa.types.is_timestamp(col.type):
                 import pyarrow.compute as pc
+
                 ms_list = pc.cast(col, pa.int64()).to_pylist()
                 return [
                     datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc) if ms is not None else None
@@ -212,17 +213,11 @@ class FeatureQualityEngine:
 
         # 3. Variance / Spread shift
         variance_ratio = 1.0
-        if (
-            baseline.std_dev is not None
-            and current.std_dev is not None
-            and baseline.std_dev > 1e-6
-        ):
+        if baseline.std_dev is not None and current.std_dev is not None and baseline.std_dev > 1e-6:
             variance_ratio = current.std_dev / baseline.std_dev
             if variance_ratio > 3.0 or variance_ratio < 0.25:
                 has_drift = True
-                reasons.append(
-                    f"Volatility ratio shifted significantly: {variance_ratio:.2f}x"
-                )
+                reasons.append(f"Volatility ratio shifted significantly: {variance_ratio:.2f}x")
 
         return {
             "feature_name": baseline.feature_name,

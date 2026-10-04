@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-import pytest
+
 import pyarrow as pa
+import pytest
 from pydantic import ValidationError
 
 from autonomous_multi_agent_real.features.types import (
@@ -15,6 +16,7 @@ from autonomous_multi_agent_real.features.types import (
     FeatureQualityReport,
     FeatureRecord,
     FeatureStatistics,
+    FeatureStoreManifest,
     FeatureStreamEvent,
     FeatureStreamStatus,
     FeatureTimeWindow,
@@ -23,7 +25,6 @@ from autonomous_multi_agent_real.features.types import (
     ParquetPartitionSpec,
     PartitionStrategy,
     StreamBufferConfig,
-    FeatureStoreManifest,
     feature_records_to_arrow_table,
     feature_vectors_to_arrow_table,
     to_arrow_schema,
@@ -292,11 +293,13 @@ def test_feature_vectors_to_arrow_table_inferred_and_explicit():
     assert "entity_id" in table_inferred.column_names
 
     # Explicit schema conversion
-    explicit_schema = pa.schema([
-        pa.field("entity_id", pa.string()),
-        pa.field("timestamp", pa.timestamp("ms", tz="UTC")),
-        pa.field("noi", pa.float64()),
-    ])
+    explicit_schema = pa.schema(
+        [
+            pa.field("entity_id", pa.string()),
+            pa.field("timestamp", pa.timestamp("ms", tz="UTC")),
+            pa.field("noi", pa.float64()),
+        ]
+    )
     table_explicit = feature_vectors_to_arrow_table([v1, v2], schema=explicit_schema)
     assert table_explicit.num_rows == 2
     assert table_explicit.column_names == ["entity_id", "timestamp", "noi"]

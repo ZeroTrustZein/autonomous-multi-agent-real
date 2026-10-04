@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 from autonomous_multi_agent_real.features.buffer import StreamFeatureBuffer
 from autonomous_multi_agent_real.features.extractor import FeatureExtractor
@@ -16,6 +14,7 @@ from autonomous_multi_agent_real.features.types import (
     FeatureRecord,
     FeatureVector,
     MaterializationJob,
+    table_to_safe_pydict,
 )
 from autonomous_multi_agent_real.types import PropertyDeal
 
@@ -73,7 +72,7 @@ class MaterializationEngine:
                 self._jobs.append(job)
                 return job
 
-            pydict = table.to_pydict()
+            pydict = table_to_safe_pydict(table)
             unique_eids = sorted(set(pydict["entity_id"]))
             total_features = 0
 
@@ -139,7 +138,7 @@ class MaterializationEngine:
                 self._jobs.append(job)
                 return job
 
-            written_files = self.offline_store.write_records(records)
+            _ = self.offline_store.write_records(records)
             unique_entities = {r.entity_id for r in records}
 
             job = MaterializationJob(
@@ -233,12 +232,14 @@ class MaterializationEngine:
         if all_parquet_table is None or all_parquet_table.num_rows == 0:
             offline_entities: set[str] = set()
         else:
-            offline_entities = set(all_parquet_table.to_pydict()["entity_id"])
+            offline_entities = set(table_to_safe_pydict(all_parquet_table)["entity_id"])
 
         if entity_ids is not None:
             check_entities = set(entity_ids)
         else:
-            check_entities = offline_entities.union({k.split(":")[-1] for k in self.online_store.keys()})
+            check_entities = offline_entities.union(
+                {k.split(":")[-1] for k in self.online_store.keys()}
+            )
 
         in_sync_count = 0
         missing_online: List[str] = []

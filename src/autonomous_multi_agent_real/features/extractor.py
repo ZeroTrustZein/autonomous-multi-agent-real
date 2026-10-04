@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Sequence, Union
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from autonomous_multi_agent_real.features.registry import FeatureRegistry, get_default_registry
 from autonomous_multi_agent_real.features.types import (
-    FeatureCategory,
-    FeatureDataType,
     FeatureRecord,
     FeatureStreamEvent,
     FeatureTimeWindow,
-    FeatureValue,
     FeatureVector,
 )
 
@@ -125,13 +122,19 @@ class FeatureExtractor:
     ) -> FeatureVector:
         """Extract baseline property, operating expense, and initial basis features from a deal representation."""
         ts = as_of or datetime.now(timezone.utc)
-        deal_id = getattr(deal, "id", None) or getattr(deal, "deal_id", None) or (deal.get("id") if isinstance(deal, dict) else "unknown_deal")
+        deal_id = (
+            getattr(deal, "id", None)
+            or getattr(deal, "deal_id", None)
+            or (deal.get("id") if isinstance(deal, dict) else "unknown_deal")
+        )
         raw_features: Dict[str, Any] = {}
 
         # 1. Attribute resolution (supports Pydantic PropertyDeal or dict)
         if isinstance(deal, dict):
             unit_mix = deal.get("unit_mix", [])
-            unit_count = sum(u.get("count", 0) for u in unit_mix) if unit_mix else deal.get("total_units", 0)
+            unit_count = (
+                sum(u.get("count", 0) for u in unit_mix) if unit_mix else deal.get("total_units", 0)
+            )
             sqft = float(deal.get("gross_square_feet", 0.0))
             price = float(deal.get("purchase_price", 0.0))
             rehab = float(deal.get("rehab_budget", 0.0))
@@ -149,7 +152,7 @@ class FeatureExtractor:
                 cnt = u.get("count", 0)
                 curr_monthly_rent += cnt * u.get("current_rent", 0.0)
                 mkt_monthly_rent += cnt * u.get("market_rent", 0.0)
-            
+
             # Expenses
             exp_data = deal.get("expenses", {})
             taxes = exp_data.get("property_taxes", 0.0)
@@ -157,7 +160,14 @@ class FeatureExtractor:
             rm = exp_data.get("repairs_and_maintenance", 0.0)
             mgmt_pct = exp_data.get("property_management_pct", 0.08)
             reserves = exp_data.get("replacement_reserves_per_unit", 250.0) * unit_count
-            fixed_opex = taxes + ins + rm + reserves + exp_data.get("utilities", 0.0) + exp_data.get("admin_and_legal", 0.0)
+            fixed_opex = (
+                taxes
+                + ins
+                + rm
+                + reserves
+                + exp_data.get("utilities", 0.0)
+                + exp_data.get("admin_and_legal", 0.0)
+            )
 
             # Financing
             fin = deal.get("financing", {})
@@ -317,15 +327,25 @@ class FeatureExtractor:
                 features["levered_irr"] = float(deal_metrics.get("levered_irr", 0.0))
                 features["equity_multiple"] = float(deal_metrics.get("equity_multiple", 0.0))
                 features["net_present_value"] = float(deal_metrics.get("net_present_value", 0.0))
-                features["average_cash_on_cash"] = float(deal_metrics.get("average_cash_on_cash", 0.0))
-                features["peak_capital_at_risk"] = float(deal_metrics.get("peak_capital_at_risk", 0.0))
+                features["average_cash_on_cash"] = float(
+                    deal_metrics.get("average_cash_on_cash", 0.0)
+                )
+                features["peak_capital_at_risk"] = float(
+                    deal_metrics.get("peak_capital_at_risk", 0.0)
+                )
             else:
                 features["unlevered_irr"] = float(getattr(deal_metrics, "unlevered_irr", 0.0))
                 features["levered_irr"] = float(getattr(deal_metrics, "levered_irr", 0.0))
                 features["equity_multiple"] = float(getattr(deal_metrics, "equity_multiple", 0.0))
-                features["net_present_value"] = float(getattr(deal_metrics, "net_present_value", 0.0))
-                features["average_cash_on_cash"] = float(getattr(deal_metrics, "average_cash_on_cash", 0.0))
-                features["peak_capital_at_risk"] = float(getattr(deal_metrics, "peak_capital_at_risk", 0.0))
+                features["net_present_value"] = float(
+                    getattr(deal_metrics, "net_present_value", 0.0)
+                )
+                features["average_cash_on_cash"] = float(
+                    getattr(deal_metrics, "average_cash_on_cash", 0.0)
+                )
+                features["peak_capital_at_risk"] = float(
+                    getattr(deal_metrics, "peak_capital_at_risk", 0.0)
+                )
 
         # 3. Monte Carlo Risk Simulation
         mc = getattr(underwrite_result, "monte_carlo", None) or (
@@ -338,24 +358,39 @@ class FeatureExtractor:
                 features["p10_irr"] = float(mc.get("p10_irr", 0.0))
                 features["p50_irr"] = float(mc.get("p50_irr", 0.0))
                 features["p90_irr"] = float(mc.get("p90_irr", 0.0))
-                prob_neg = float(mc.get("probability_negative_irr") or mc.get("probability_of_loss", 0.0))
+                prob_neg = float(
+                    mc.get("probability_negative_irr") or mc.get("probability_of_loss", 0.0)
+                )
                 features["probability_negative_irr"] = prob_neg
                 features["default_probability"] = prob_neg
                 features["probability_dscr_breach"] = float(mc.get("probability_dscr_breach", 0.0))
                 features["var_95"] = float(mc.get("var_95_irr") or mc.get("var_95", 0.0))
                 features["cvar_95"] = float(mc.get("cvar_95_irr") or mc.get("cvar_95", 0.0))
             else:
-                features["mean_irr"] = float(getattr(mc, "mean_levered_irr", None) or getattr(mc, "mean_irr", 0.0))
-                features["std_irr"] = float(getattr(mc, "std_levered_irr", None) or getattr(mc, "std_irr", 0.0))
+                features["mean_irr"] = float(
+                    getattr(mc, "mean_levered_irr", None) or getattr(mc, "mean_irr", 0.0)
+                )
+                features["std_irr"] = float(
+                    getattr(mc, "std_levered_irr", None) or getattr(mc, "std_irr", 0.0)
+                )
                 features["p10_irr"] = float(getattr(mc, "p10_irr", 0.0))
                 features["p50_irr"] = float(getattr(mc, "p50_irr", 0.0))
                 features["p90_irr"] = float(getattr(mc, "p90_irr", 0.0))
-                prob_neg = float(getattr(mc, "probability_negative_irr", None) or getattr(mc, "probability_of_loss", 0.0))
+                prob_neg = float(
+                    getattr(mc, "probability_negative_irr", None)
+                    or getattr(mc, "probability_of_loss", 0.0)
+                )
                 features["probability_negative_irr"] = prob_neg
                 features["default_probability"] = prob_neg
-                features["probability_dscr_breach"] = float(getattr(mc, "probability_dscr_breach", 0.0))
-                features["var_95"] = float(getattr(mc, "var_95_irr", None) or getattr(mc, "var_95", 0.0))
-                features["cvar_95"] = float(getattr(mc, "cvar_95_irr", None) or getattr(mc, "cvar_95", 0.0))
+                features["probability_dscr_breach"] = float(
+                    getattr(mc, "probability_dscr_breach", 0.0)
+                )
+                features["var_95"] = float(
+                    getattr(mc, "var_95_irr", None) or getattr(mc, "var_95", 0.0)
+                )
+                features["cvar_95"] = float(
+                    getattr(mc, "cvar_95_irr", None) or getattr(mc, "cvar_95", 0.0)
+                )
 
         # 4. Breakeven Metrics
         be = getattr(underwrite_result, "breakeven", None) or (
@@ -366,8 +401,12 @@ class FeatureExtractor:
                 features["break_even_occupancy"] = float(be.get("breakeven_occupancy_pct", 0.0))
                 features["breakeven_rent_per_unit"] = float(be.get("breakeven_rent_per_unit", 0.0))
             else:
-                features["break_even_occupancy"] = float(getattr(be, "breakeven_occupancy_pct", 0.0))
-                features["breakeven_rent_per_unit"] = float(getattr(be, "breakeven_rent_per_unit", 0.0))
+                features["break_even_occupancy"] = float(
+                    getattr(be, "breakeven_occupancy_pct", 0.0)
+                )
+                features["breakeven_rent_per_unit"] = float(
+                    getattr(be, "breakeven_rent_per_unit", 0.0)
+                )
 
         # 5. Waterfall Structure Return Shares
         wf = getattr(underwrite_result, "waterfall", None) or (
@@ -379,13 +418,22 @@ class FeatureExtractor:
                 features["gp_net_irr"] = float(wf.get("gp_irr") or wf.get("gp_net_irr", 0.0))
                 features["lp_equity_multiple"] = float(wf.get("lp_equity_multiple", 0.0))
                 features["gp_equity_multiple"] = float(wf.get("gp_equity_multiple", 0.0))
-                features["total_promote_dollars"] = float(wf.get("gp_total_promote") or wf.get("total_promote_dollars", 0.0))
+                features["total_promote_dollars"] = float(
+                    wf.get("gp_total_promote") or wf.get("total_promote_dollars", 0.0)
+                )
             else:
-                features["lp_net_irr"] = float(getattr(wf, "lp_irr", None) or getattr(wf, "lp_net_irr", 0.0))
-                features["gp_net_irr"] = float(getattr(wf, "gp_irr", None) or getattr(wf, "gp_net_irr", 0.0))
+                features["lp_net_irr"] = float(
+                    getattr(wf, "lp_irr", None) or getattr(wf, "lp_net_irr", 0.0)
+                )
+                features["gp_net_irr"] = float(
+                    getattr(wf, "gp_irr", None) or getattr(wf, "gp_net_irr", 0.0)
+                )
                 features["lp_equity_multiple"] = float(getattr(wf, "lp_equity_multiple", 0.0))
                 features["gp_equity_multiple"] = float(getattr(wf, "gp_equity_multiple", 0.0))
-                features["total_promote_dollars"] = float(getattr(wf, "gp_total_promote", None) or getattr(wf, "total_promote_dollars", 0.0))
+                features["total_promote_dollars"] = float(
+                    getattr(wf, "gp_total_promote", None)
+                    or getattr(wf, "total_promote_dollars", 0.0)
+                )
 
         # Re-run derived feature computation
         enriched = self.registry.compute_derived(features)
@@ -426,9 +474,17 @@ class FeatureExtractor:
         """Convert a FeatureStreamEvent payload into atomic FeatureRecord elements."""
         records: List[FeatureRecord] = []
         payload = event.payload
-        entity_id = getattr(event, "entity_id", None) or str(payload.get("entity_id") or payload.get("deal_id") or "stream_unknown")
-        entity_type = getattr(event, "entity_type", None) or str(payload.get("entity_type") or "deal")
-        ts = getattr(event, "event_time", None) or getattr(event, "timestamp", None) or datetime.now(timezone.utc)
+        entity_id = getattr(event, "entity_id", None) or str(
+            payload.get("entity_id") or payload.get("deal_id") or "stream_unknown"
+        )
+        entity_type = getattr(event, "entity_type", None) or str(
+            payload.get("entity_type") or "deal"
+        )
+        ts = (
+            getattr(event, "event_time", None)
+            or getattr(event, "timestamp", None)
+            or datetime.now(timezone.utc)
+        )
 
         # If payload contains nested features dict
         feat_dict = payload.get("features", payload)
@@ -472,3 +528,24 @@ class FeatureExtractor:
         agg = self._aggregators[key]
         agg.add(value, dt=timestamp)
         return agg.to_dict(prefix=f"{feature_name}_{window.value}")
+
+    def extract_deal_features(
+        self,
+        deal: Any,
+        context: Optional[Any] = None,
+        as_of: Optional[datetime] = None,
+    ) -> FeatureVector:
+        """Alias for extract_from_deal or extract_from_underwrite depending on context availability."""
+        if context is not None:
+            return self.extract_from_underwrite(deal, underwrite_result=context, as_of=as_of)
+        return self.extract_from_deal(deal, as_of=as_of)
+
+    def extract_deal_records(
+        self,
+        deal: Any,
+        context: Optional[Any] = None,
+        source: str = "feature_extractor",
+    ) -> List[FeatureRecord]:
+        """Alias for extract_records passing deal and optional context."""
+        return self.extract_records(deal, underwrite_result=context, source=source)
+

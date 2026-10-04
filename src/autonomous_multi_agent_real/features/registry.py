@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set
 
 from autonomous_multi_agent_real.features.types import (
     FeatureCategory,
@@ -12,7 +12,6 @@ from autonomous_multi_agent_real.features.types import (
     FeatureQualityReport,
     FeatureVector,
 )
-
 
 DerivedComputeFn = Callable[[Dict[str, Any]], Any]
 
@@ -84,7 +83,7 @@ class FeatureRegistry:
         on other derived features.
         """
         enriched: Dict[str, Any] = dict(features)
-        
+
         # Determine execution order via simple topological dependency resolution
         unresolved: Set[str] = set(self._derived_computations.keys())
         resolved: List[str] = []
@@ -97,10 +96,10 @@ class FeatureRegistry:
                 # A feature can be computed if all its dependencies are already present in enriched or in resolved
                 if all(dep in enriched or dep in resolved for dep in deps):
                     newly_resolved.append(name)
-            
+
             if not newly_resolved:
                 break
-                
+
             for name in newly_resolved:
                 resolved.append(name)
                 unresolved.remove(name)
@@ -477,11 +476,7 @@ def get_default_registry() -> FeatureRegistry:
             is_nullable=True,
             tags=["derived", "debt"],
         ),
-        compute_fn=lambda f: (
-            f["dscr_year1"] - 1.0
-            if f.get("dscr_year1") is not None
-            else None
-        ),
+        compute_fn=lambda f: f["dscr_year1"] - 1.0 if f.get("dscr_year1") is not None else None,
         dependencies=["dscr_year1"],
     )
 
