@@ -49,7 +49,7 @@ class WindowedAggregator:
 
     def _prune(self, current_ts: float) -> None:
         cutoff = current_ts - self.window_seconds
-        while self._history and self._history[0][0] < cutoff:
+        while self._history and self._history[0][0] <= cutoff:
             self._history.popleft()
 
     @property
@@ -333,23 +333,29 @@ class FeatureExtractor:
         )
         if mc:
             if isinstance(mc, dict):
-                features["mean_irr"] = float(mc.get("mean_irr", 0.0))
-                features["std_irr"] = float(mc.get("std_irr", 0.0))
+                features["mean_irr"] = float(mc.get("mean_levered_irr") or mc.get("mean_irr", 0.0))
+                features["std_irr"] = float(mc.get("std_levered_irr") or mc.get("std_irr", 0.0))
                 features["p10_irr"] = float(mc.get("p10_irr", 0.0))
                 features["p50_irr"] = float(mc.get("p50_irr", 0.0))
                 features["p90_irr"] = float(mc.get("p90_irr", 0.0))
-                features["default_probability"] = float(mc.get("probability_of_loss", 0.0))
-                features["var_95"] = float(mc.get("var_95", 0.0))
-                features["cvar_95"] = float(mc.get("cvar_95", 0.0))
+                prob_neg = float(mc.get("probability_negative_irr") or mc.get("probability_of_loss", 0.0))
+                features["probability_negative_irr"] = prob_neg
+                features["default_probability"] = prob_neg
+                features["probability_dscr_breach"] = float(mc.get("probability_dscr_breach", 0.0))
+                features["var_95"] = float(mc.get("var_95_irr") or mc.get("var_95", 0.0))
+                features["cvar_95"] = float(mc.get("cvar_95_irr") or mc.get("cvar_95", 0.0))
             else:
-                features["mean_irr"] = float(getattr(mc, "mean_irr", 0.0))
-                features["std_irr"] = float(getattr(mc, "std_irr", 0.0))
+                features["mean_irr"] = float(getattr(mc, "mean_levered_irr", None) or getattr(mc, "mean_irr", 0.0))
+                features["std_irr"] = float(getattr(mc, "std_levered_irr", None) or getattr(mc, "std_irr", 0.0))
                 features["p10_irr"] = float(getattr(mc, "p10_irr", 0.0))
                 features["p50_irr"] = float(getattr(mc, "p50_irr", 0.0))
                 features["p90_irr"] = float(getattr(mc, "p90_irr", 0.0))
-                features["default_probability"] = float(getattr(mc, "probability_of_loss", 0.0))
-                features["var_95"] = float(getattr(mc, "var_95", 0.0))
-                features["cvar_95"] = float(getattr(mc, "cvar_95", 0.0))
+                prob_neg = float(getattr(mc, "probability_negative_irr", None) or getattr(mc, "probability_of_loss", 0.0))
+                features["probability_negative_irr"] = prob_neg
+                features["default_probability"] = prob_neg
+                features["probability_dscr_breach"] = float(getattr(mc, "probability_dscr_breach", 0.0))
+                features["var_95"] = float(getattr(mc, "var_95_irr", None) or getattr(mc, "var_95", 0.0))
+                features["cvar_95"] = float(getattr(mc, "cvar_95_irr", None) or getattr(mc, "cvar_95", 0.0))
 
         # 4. Breakeven Metrics
         be = getattr(underwrite_result, "breakeven", None) or (
@@ -369,17 +375,17 @@ class FeatureExtractor:
         )
         if wf:
             if isinstance(wf, dict):
-                features["lp_net_irr"] = float(wf.get("lp_net_irr", 0.0))
-                features["gp_net_irr"] = float(wf.get("gp_net_irr", 0.0))
+                features["lp_net_irr"] = float(wf.get("lp_irr") or wf.get("lp_net_irr", 0.0))
+                features["gp_net_irr"] = float(wf.get("gp_irr") or wf.get("gp_net_irr", 0.0))
                 features["lp_equity_multiple"] = float(wf.get("lp_equity_multiple", 0.0))
                 features["gp_equity_multiple"] = float(wf.get("gp_equity_multiple", 0.0))
-                features["total_promote_dollars"] = float(wf.get("total_promote_dollars", 0.0))
+                features["total_promote_dollars"] = float(wf.get("gp_total_promote") or wf.get("total_promote_dollars", 0.0))
             else:
-                features["lp_net_irr"] = float(getattr(wf, "lp_net_irr", 0.0))
-                features["gp_net_irr"] = float(getattr(wf, "gp_net_irr", 0.0))
+                features["lp_net_irr"] = float(getattr(wf, "lp_irr", None) or getattr(wf, "lp_net_irr", 0.0))
+                features["gp_net_irr"] = float(getattr(wf, "gp_irr", None) or getattr(wf, "gp_net_irr", 0.0))
                 features["lp_equity_multiple"] = float(getattr(wf, "lp_equity_multiple", 0.0))
                 features["gp_equity_multiple"] = float(getattr(wf, "gp_equity_multiple", 0.0))
-                features["total_promote_dollars"] = float(getattr(wf, "total_promote_dollars", 0.0))
+                features["total_promote_dollars"] = float(getattr(wf, "gp_total_promote", None) or getattr(wf, "total_promote_dollars", 0.0))
 
         # Re-run derived feature computation
         enriched = self.registry.compute_derived(features)
@@ -420,14 +426,14 @@ class FeatureExtractor:
         """Convert a FeatureStreamEvent payload into atomic FeatureRecord elements."""
         records: List[FeatureRecord] = []
         payload = event.payload
-        entity_id = str(payload.get("entity_id") or payload.get("deal_id") or "stream_unknown")
-        entity_type = str(payload.get("entity_type") or "deal")
-        ts = event.timestamp
+        entity_id = getattr(event, "entity_id", None) or str(payload.get("entity_id") or payload.get("deal_id") or "stream_unknown")
+        entity_type = getattr(event, "entity_type", None) or str(payload.get("entity_type") or "deal")
+        ts = getattr(event, "event_time", None) or getattr(event, "timestamp", None) or datetime.now(timezone.utc)
 
         # If payload contains nested features dict
         feat_dict = payload.get("features", payload)
         for k, v in feat_dict.items():
-            if k in ("entity_id", "deal_id", "entity_type", "timestamp"):
+            if k in ("entity_id", "deal_id", "entity_type", "timestamp", "event_time"):
                 continue
             records.append(
                 FeatureRecord(

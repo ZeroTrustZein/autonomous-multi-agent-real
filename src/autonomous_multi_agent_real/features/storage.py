@@ -31,14 +31,12 @@ class ParquetFeatureStore:
         self,
         base_path: Union[str, Path],
         partition_spec: Optional[ParquetPartitionSpec] = None,
+        dataset_id: str = "cre_feature_store",
     ) -> None:
         self.base_path = Path(base_path).resolve()
         self.base_path.mkdir(parents=True, exist_ok=True)
-        self.partition_spec = partition_spec or ParquetPartitionSpec(
-            strategy=PartitionStrategy.DAILY,
-            compression="snappy",
-            dictionary_encoding=True,
-        )
+        self.partition_spec = partition_spec or ParquetPartitionSpec()
+        self.dataset_id = dataset_id
         self._manifest_file = self.base_path / "manifest.json"
         self._ensure_manifest()
 
@@ -46,15 +44,14 @@ class ParquetFeatureStore:
         """Initialize or load store manifest."""
         if not self._manifest_file.exists():
             manifest = FeatureStoreManifest(
+                dataset_id=self.dataset_id,
                 store_path=str(self.base_path),
                 created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                last_updated_at=datetime.now(timezone.utc),
                 total_records=0,
                 total_files=0,
-                partition_strategy=self.partition_spec.strategy,
+                partition_keys=list(self.partition_spec.partition_columns),
                 feature_names=[],
-                schema_version="1.0.0",
-                metadata={"compression": self.partition_spec.compression},
             )
             self._save_manifest(manifest)
 
@@ -80,7 +77,7 @@ class ParquetFeatureStore:
         combined_names = sorted(set(manifest.feature_names).union(new_feature_names))
         updated = manifest.model_copy(
             update={
-                "updated_at": datetime.now(timezone.utc),
+                "last_updated_at": datetime.now(timezone.utc),
                 "total_records": manifest.total_records + new_records_count,
                 "total_files": max(0, manifest.total_files + file_delta),
                 "feature_names": combined_names,
@@ -88,25 +85,30 @@ class ParquetFeatureStore:
         )
         self._save_manifest(updated)
 
-    def _get_partition_path(self, record_timestamp: datetime, entity_type: str = "deal", entity_id: Optional[str] = None) -> Path:
-        """Resolve directory path based on partition strategy."""
-        strat = self.partition_spec.strategy
-        if strat == PartitionStrategy.DAILY:
-            date_str = record_timestamp.strftime("%Y-%m-%d")
-            path = self.base_path / f"date={date_str}"
-        elif strat == PartitionStrategy.ENTITY:
-            ent = entity_id or "default"
-            path = self.base_path / f"entity_type={entity_type}" / f"entity_id={ent}"
-        elif strat == PartitionStrategy.COMPOSITE:
-            date_str = record_timestamp.strftime("%Y-%m-%d")
-            path = self.base_path / f"entity_type={entity_type}" / f"date={date_str}"
-        elif strat == PartitionStrategy.CATEGORY:
-            path = self.base_path / f"entity_type={entity_type}"
-        else:
-            path = self.base_path / "data"
+    def _resolve_partition_dir(
+        self,
+        record_timestamp: datetime,
+        attributes: Dict[str, Any],
+    ) -> Path:
+        """Resolve directory path based on partition_spec columns and record attributes."""
+        parts: List[str] = []
+        for col in self.partition_spec.partition_columns:
+            if col == "date":
+                val = record_timestamp.strftime("%Y-%m-%d")
+            else:
+                raw_val = attributes.get(col)
+                val = str(raw_val) if raw_val is not None else "unknown"
+            parts.append(f"{col}={val}")
 
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        if not parts:
+            # Fallback to date partitioning
+            parts.append(f"date={record_timestamp.strftime('%Y-%m-%d')}")
+
+        target_dir = self.base_path
+        for p in parts:
+            target_dir = target_dir / p
+        target_dir.mkdir(parents=True, exist_ok=True)
+        return target_dir
 
     def write_vectors(self, vectors: Sequence[FeatureVector]) -> List[Path]:
         """Write feature vectors into partitioned Parquet files."""
@@ -114,17 +116,24 @@ class ParquetFeatureStore:
             return []
 
         written_files: List[Path] = []
-        # Group vectors by partition path
         grouped: Dict[Path, List[FeatureVector]] = {}
+        all_feature_keys: set[str] = set()
+
         for vec in vectors:
-            p_dir = self._get_partition_path(
+            # Merge vector metadata, features, and standard fields for partition resolution
+            attr_pool: Dict[str, Any] = {
+                "entity_type": vec.entity_type,
+                "entity_id": vec.entity_id,
+            }
+            attr_pool.update(vec.metadata)
+            attr_pool.update(vec.features)
+
+            p_dir = self._resolve_partition_dir(
                 record_timestamp=vec.timestamp,
-                entity_type=vec.entity_type,
-                entity_id=vec.entity_id,
+                attributes=attr_pool,
             )
             grouped.setdefault(p_dir, []).append(vec)
-
-        all_feature_keys: set[str] = set()
+            all_feature_keys.update(vec.features.keys())
 
         for target_dir, p_vectors in grouped.items():
             table = feature_vectors_to_arrow_table(p_vectors)
@@ -136,10 +145,9 @@ class ParquetFeatureStore:
                 target_file,
                 compression=self.partition_spec.compression,
                 use_dictionary=self.partition_spec.dictionary_encoding,
+                row_group_size=self.partition_spec.row_group_size,
             )
             written_files.append(target_file)
-            for v in p_vectors:
-                all_feature_keys.update(v.features.keys())
 
         self._update_manifest_stats(
             new_records_count=len(vectors),
@@ -155,15 +163,20 @@ class ParquetFeatureStore:
 
         written_files: List[Path] = []
         grouped: Dict[Path, List[FeatureRecord]] = {}
+        all_names = sorted({r.feature_name for r in records})
+
         for rec in records:
-            p_dir = self._get_partition_path(
+            attr_pool = {
+                "entity_type": rec.entity_type,
+                "entity_id": rec.entity_id,
+                "source": rec.source,
+                "partition_key": rec.partition_key,
+            }
+            p_dir = self._resolve_partition_dir(
                 record_timestamp=rec.timestamp,
-                entity_type=rec.entity_type,
-                entity_id=rec.entity_id,
+                attributes=attr_pool,
             )
             grouped.setdefault(p_dir, []).append(rec)
-
-        all_names = sorted({r.feature_name for r in records})
 
         for target_dir, p_records in grouped.items():
             table = feature_records_to_arrow_table(p_records)
@@ -175,6 +188,7 @@ class ParquetFeatureStore:
                 target_file,
                 compression=self.partition_spec.compression,
                 use_dictionary=self.partition_spec.dictionary_encoding,
+                row_group_size=self.partition_spec.row_group_size,
             )
             written_files.append(target_file)
 
@@ -214,7 +228,6 @@ class ParquetFeatureStore:
         if not tables:
             return None
 
-        # Unify schema if disparate columns exist
         return pa.concat_tables(tables, promote_options="default")
 
     def query(
@@ -234,7 +247,6 @@ class ParquetFeatureStore:
             ])
             return empty_schema.empty_table()
 
-        # In-memory filter with PyArrow compute
         mask = pc.equal(pc.is_null(full_table["entity_id"]), False)
 
         if entity_ids is not None and len(entity_ids) > 0:
@@ -286,14 +298,25 @@ class ParquetFeatureStore:
         if table.num_rows == 0:
             return None
 
-        # Sort by timestamp descending to find latest state
-        pydict = table.to_pydict()
+        # Safe column extraction avoiding Windows zoneinfo missing tzdata
+        pydict: Dict[str, List[Any]] = {}
+        for col_name in table.column_names:
+            col = table[col_name]
+            if pa.types.is_timestamp(col.type):
+                ms_list = pc.cast(col, pa.int64()).to_pylist()
+                pydict[col_name] = [
+                    datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc) if ms is not None else None
+                    for ms in ms_list
+                ]
+            else:
+                pydict[col_name] = col.to_pylist()
+
         timestamps = pydict["timestamp"]
         latest_idx = -1
         latest_ts = None
 
         for idx, ts in enumerate(timestamps):
-            if ts <= as_of:
+            if ts is not None and ts <= as_of:
                 if latest_ts is None or ts > latest_ts:
                     latest_ts = ts
                     latest_idx = idx
@@ -349,14 +372,9 @@ class ParquetFeatureStore:
         partitions = self.list_partitions()
         compacted_count = 0
 
-        # Also check root data dir
         check_dirs = [self.base_path / p for p in partitions]
-        if (self.base_path / "data").exists():
-            check_dirs.append(self.base_path / "data")
-
         for p_dir in check_dirs:
             p_files = list(p_dir.glob("*.parquet"))
-            # If 2 or more files exist in partition, consolidate
             if len(p_files) >= 2:
                 tables = []
                 for pf in p_files:
@@ -371,8 +389,8 @@ class ParquetFeatureStore:
                         merged,
                         consolidated_file,
                         compression=self.partition_spec.compression,
+                        row_group_size=self.partition_spec.row_group_size,
                     )
-                    # Delete fragmented files
                     for pf in p_files:
                         pf.unlink(missing_ok=True)
                     compacted_count += len(p_files)
@@ -384,7 +402,7 @@ class ParquetFeatureStore:
             manifest.model_copy(
                 update={
                     "total_files": current_total_files,
-                    "updated_at": datetime.now(timezone.utc),
+                    "last_updated_at": datetime.now(timezone.utc),
                 }
             )
         )

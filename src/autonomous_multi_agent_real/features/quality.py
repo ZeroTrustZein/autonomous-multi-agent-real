@@ -33,6 +33,13 @@ class FeatureQualityEngine:
             if feature_name not in data.column_names:
                 return []
             col = data[feature_name]
+            if pa.types.is_timestamp(col.type):
+                import pyarrow.compute as pc
+                ms_list = pc.cast(col, pa.int64()).to_pylist()
+                return [
+                    datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc) if ms is not None else None
+                    for ms in ms_list
+                ]
             return col.to_pylist()
         else:
             return [v.features.get(feature_name) for v in data]
@@ -142,15 +149,17 @@ class FeatureQualityEngine:
                 null_rate_violations[meta.name] = feature_stat.null_rate
 
             # Check range boundaries
-            if meta.min_value is not None and feature_stat.min_value is not None:
-                if feature_stat.min_value < meta.min_value:
+            min_val = getattr(meta, "min_value", None)
+            max_val = getattr(meta, "max_value", None)
+            if min_val is not None and feature_stat.min_value is not None:
+                if feature_stat.min_value < min_val:
                     range_violations[meta.name] = (
-                        f"Observed min {feature_stat.min_value} < constraint {meta.min_value}"
+                        f"Observed min {feature_stat.min_value} < constraint {min_val}"
                     )
-            if meta.max_value is not None and feature_stat.max_value is not None:
-                if feature_stat.max_value > meta.max_value:
+            if max_val is not None and feature_stat.max_value is not None:
+                if feature_stat.max_value > max_val:
                     range_violations[meta.name] = (
-                        f"Observed max {feature_stat.max_value} > constraint {meta.max_value}"
+                        f"Observed max {feature_stat.max_value} > constraint {max_val}"
                     )
 
         is_valid = (

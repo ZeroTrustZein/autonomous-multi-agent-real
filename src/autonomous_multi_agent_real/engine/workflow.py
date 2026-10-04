@@ -35,6 +35,8 @@ class DealPipeline:
         sensitivity_engine: Optional[SensitivityEngine] = None,
         tax_engine: Optional[TaxEngine] = None,
         optimizer: Optional[DealOptimizer] = None,
+        feature_interceptor: Optional[Any] = None,
+        feature_coordinator: Optional[Any] = None,
     ):
         from autonomous_multi_agent_real.agents.acquisition import AcquisitionAgent
         from autonomous_multi_agent_real.agents.cashflow import CashFlowAgent
@@ -64,6 +66,12 @@ class DealPipeline:
         self.sensitivity_engine = sensitivity_engine or SensEngine()
         self.tax_engine = tax_engine or TxEngine()
         self.optimizer = optimizer or Optimizer()
+
+        if feature_coordinator is not None and feature_interceptor is None:
+            self.feature_interceptor = feature_coordinator.get_pipeline_interceptor()
+        else:
+            self.feature_interceptor = feature_interceptor
+
 
     def run(self, deal: PropertyDeal) -> UnderwritingResult:
         """Synchronously execute the full underwriting workflow on a deal."""

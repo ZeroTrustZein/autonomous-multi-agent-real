@@ -135,11 +135,13 @@ class FeatureRegistry:
                 continue
 
             # Validate range constraints for numeric features
+            min_val = getattr(meta, "min_value", None)
+            max_val = getattr(meta, "max_value", None)
             if isinstance(val, (int, float)):
-                if meta.min_value is not None and val < meta.min_value:
-                    range_violations[name] = f"Value {val} below minimum {meta.min_value}"
-                elif meta.max_value is not None and val > meta.max_value:
-                    range_violations[name] = f"Value {val} above maximum {meta.max_value}"
+                if min_val is not None and val < min_val:
+                    range_violations[name] = f"Value {val} below minimum {min_val}"
+                elif max_val is not None and val > max_val:
+                    range_violations[name] = f"Value {val} above maximum {max_val}"
 
         is_valid = len(missing) == 0 and len(range_violations) == 0
         return FeatureQualityReport(

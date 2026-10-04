@@ -7,6 +7,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from autonomous_multi_agent_real.features.types import (
     FeatureRecord,
     FeatureStreamEvent,
@@ -17,6 +19,21 @@ from autonomous_multi_agent_real.features.types import (
 
 
 FlushCallback = Callable[[List[FeatureRecord]], None]
+
+
+class BufferMetrics(BaseModel):
+    """Operational metrics and telemetry for in-memory streaming buffer."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    records_in_buffer: int = Field(0, ge=0)
+    total_records_ingested: int = Field(0, ge=0)
+    total_records_flushed: int = Field(0, ge=0)
+    total_flushes: int = Field(0, ge=0)
+    dropped_records: int = Field(0, ge=0)
+    buffer_utilization: float = Field(0.0, ge=0.0)
+    is_healthy: bool = True
+    last_flush_timestamp: Optional[datetime] = None
 
 
 class StreamFeatureBuffer:
@@ -43,10 +60,14 @@ class StreamFeatureBuffer:
         self._total_flushes = 0
         self._dropped_records = 0
 
+    @property
+    def capacity(self) -> int:
+        return getattr(self.config, "buffer_size", 1000)
+
     def add_record(self, record: FeatureRecord) -> bool:
         """Add a single feature record to the streaming buffer.
 
-        Flushes automatically if buffer reaches max_records capacity or timeout.
+        Flushes automatically if buffer reaches buffer_size capacity or timeout.
         """
         now_utc = datetime.now(timezone.utc)
         record_age = (now_utc - record.timestamp).total_seconds()
@@ -59,14 +80,14 @@ class StreamFeatureBuffer:
 
         with self._lock:
             # Memory / capacity check
-            if len(self._buffer) >= self.config.max_records:
+            if len(self._buffer) >= self.capacity:
                 self._flush_locked()
 
             self._buffer.append(record)
             self._total_ingested += 1
 
             # Check if threshold reached
-            if len(self._buffer) >= self.config.max_records:
+            if len(self._buffer) >= self.capacity:
                 self._flush_locked()
             elif (time.monotonic() - self._last_flush_time) >= self.config.flush_interval_seconds:
                 self._flush_locked()
@@ -100,14 +121,14 @@ class StreamFeatureBuffer:
     def add_event(self, event: FeatureStreamEvent, source: str = "stream_event") -> int:
         """Unpack a FeatureStreamEvent into the buffer."""
         payload = event.payload
-        entity_id = str(payload.get("entity_id") or payload.get("deal_id") or "event_entity")
-        entity_type = str(payload.get("entity_type") or "deal")
-        ts = event.timestamp
+        entity_id = getattr(event, "entity_id", None) or str(payload.get("entity_id") or payload.get("deal_id") or "event_entity")
+        entity_type = getattr(event, "entity_type", None) or str(payload.get("entity_type") or "deal")
+        ts = getattr(event, "event_time", None) or getattr(event, "timestamp", None) or datetime.now(timezone.utc)
 
         feat_dict = payload.get("features", payload)
         records: List[FeatureRecord] = []
         for k, v in feat_dict.items():
-            if k in ("entity_id", "deal_id", "entity_type", "timestamp"):
+            if k in ("entity_id", "deal_id", "entity_type", "timestamp", "event_time"):
                 continue
             records.append(
                 FeatureRecord(
@@ -142,7 +163,6 @@ class StreamFeatureBuffer:
             try:
                 self.flush_sink(to_flush)
             except Exception:
-                # If sink fails, record as dropped or handle gracefully
                 self._dropped_records += count
                 return 0
 
@@ -150,12 +170,13 @@ class StreamFeatureBuffer:
         self._total_flushes += 1
         return count
 
-    def get_status(self) -> FeatureStreamStatus:
+    def get_status(self) -> BufferMetrics:
         """Query current buffer operational metrics and status."""
         with self._lock:
             current_len = len(self._buffer)
-            utilization = (current_len / self.config.max_records) if self.config.max_records > 0 else 0.0
-            return FeatureStreamStatus(
+            cap = self.capacity
+            utilization = (current_len / cap) if cap > 0 else 0.0
+            return BufferMetrics(
                 records_in_buffer=current_len,
                 total_records_ingested=self._total_ingested,
                 total_records_flushed=self._total_flushed,

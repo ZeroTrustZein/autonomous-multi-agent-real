@@ -102,6 +102,8 @@ class FeatureMetadata(BaseModel):
         FeatureTimeWindow.REALTIME, description="Aggregation window"
     )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    min_value: Optional[float] = Field(None, description="Lower bound for quality validation")
+    max_value: Optional[float] = Field(None, description="Upper bound for quality validation")
 
     @field_validator("name")
     @classmethod
@@ -419,3 +421,113 @@ def feature_records_to_arrow_table(
             "partition_key",
         ],
     )
+
+
+class OnlineStoreConfig(BaseModel):
+    """Configuration for in-memory / fast low-latency feature serving store."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ttl_seconds: Optional[float] = Field(
+        default=None,
+        description="Time-to-live for cached features in seconds. None indicates no expiration.",
+    )
+    max_entries: int = Field(
+        default=50000,
+        ge=1,
+        description="Maximum number of entity vectors cached concurrently.",
+    )
+    eviction_policy: str = Field(
+        default="lru",
+        description="Cache eviction policy ('lru' or 'fifo').",
+    )
+
+
+class MaterializationJob(BaseModel):
+    """Metadata tracking offline-to-online sync or backfill jobs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    job_id: str = Field(
+        default_factory=lambda: f"mat_{uuid.uuid4().hex[:10]}",
+        description="Unique identifier for the materialization job.",
+    )
+    job_type: str = Field(
+        default="sync_to_online",
+        description="Type of materialization: sync_to_online, buffer_flush, or deal_backfill.",
+    )
+    status: str = Field(
+        default="completed",
+        description="Status of job: pending, in_progress, completed, failed.",
+    )
+    entities_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of unique entities processed.",
+    )
+    features_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of feature values materialized.",
+    )
+    started_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Timestamp when the job started.",
+    )
+    completed_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when the job finished.",
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="Error details if the job failed.",
+    )
+
+
+class ObservationTarget(BaseModel):
+    """Observation frame definition for historical point-in-time training joins."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity_id: str = Field(..., min_length=1, description="Entity identifier.")
+    timestamp: datetime = Field(..., description="Timestamp of observation cutoff.")
+    label_name: str = Field(..., min_length=1, description="Target label name.")
+    label_value: Any = Field(..., description="Observed target label value.")
+    entity_type: str = Field(default="deal", description="Entity category/type.")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Contextual observation metadata.")
+
+
+class TrainingDatasetMetadata(BaseModel):
+    """Summary metadata for point-in-time training/evaluation datasets."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dataset_name: str = Field(..., min_length=1, description="Dataset name.")
+    schema_version: str = Field(default="1.0.0", description="Feature schema version.")
+    label_name: str = Field(..., min_length=1, description="Target variable name.")
+    feature_names: List[str] = Field(default_factory=list, description="Ordered feature column names.")
+    train_count: int = Field(default=0, ge=0, description="Number of training rows.")
+    val_count: int = Field(default=0, ge=0, description="Number of validation rows.")
+    test_count: int = Field(default=0, ge=0, description="Number of test rows.")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Creation timestamp.",
+    )
+
+
+class EnrichedFeatureContext(BaseModel):
+    """Statistical cohort benchmarks, z-scores, and percentiles for agent underwriting."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity_id: str = Field(..., min_length=1, description="Entity identifier.")
+    cohort_name: str = Field(default="all_deals", description="Cohort grouping name.")
+    features: Dict[str, Any] = Field(default_factory=dict, description="Raw feature values.")
+    percentiles: Dict[str, float] = Field(default_factory=dict, description="Percentile rankings [0.0 - 1.0].")
+    z_scores: Dict[str, float] = Field(default_factory=dict, description="Z-score normalized metrics.")
+    cohort_medians: Dict[str, float] = Field(default_factory=dict, description="Cohort median reference values.")
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Enrichment timestamp.",
+    )
+
