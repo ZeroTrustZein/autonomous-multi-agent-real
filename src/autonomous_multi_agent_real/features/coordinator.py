@@ -53,7 +53,6 @@ class FeatureStoreCoordinator:
         self.online_store = OnlineFeatureStore(config=online_config)
         self.buffer = StreamFeatureBuffer(
             config=buffer_config,
-            extractor=self.extractor,
         )
 
         self.serving_service = FeatureServingService(

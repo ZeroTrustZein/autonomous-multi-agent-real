@@ -13,11 +13,10 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from autonomous_multi_agent_real.features.types import (
-    FeatureStoreManifest,
     FeatureRecord,
+    FeatureStoreManifest,
     FeatureVector,
     ParquetPartitionSpec,
-    PartitionStrategy,
     feature_records_to_arrow_table,
     feature_vectors_to_arrow_table,
     table_to_safe_pydict,

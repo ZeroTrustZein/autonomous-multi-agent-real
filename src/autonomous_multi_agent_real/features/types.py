@@ -197,6 +197,7 @@ class FeatureStreamEvent(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_type: str = Field("feature_update")
     stream_name: str = Field("real_estate_underwriting_stream")
     entity_id: str
     entity_type: str = Field("deal")
@@ -205,6 +206,16 @@ class FeatureStreamEvent(BaseModel):
     status: FeatureStreamStatus = Field(FeatureStreamStatus.BUFFERED)
     retry_count: int = Field(0, ge=0)
     error_message: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_stream_event(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "features" in data and "payload" not in data:
+                data["payload"] = {"features": data["features"]}
+            elif "features" in data and isinstance(data.get("payload"), dict):
+                data["payload"]["features"] = data["features"]
+        return data
 
 
 class StreamBufferConfig(BaseModel):
@@ -281,7 +292,12 @@ class FeatureQualityReport(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    is_valid: bool
+    is_valid: bool = True
+    dataset_name: str = "feature_dataset"
+    total_records: int = Field(0, ge=0)
+    valid_records: int = Field(0, ge=0)
+    invalid_records: int = Field(0, ge=0)
+    overall_quality_score: float = Field(1.0, ge=0.0, le=1.0)
     total_features_checked: int = Field(0, ge=0)
     missing_features: List[str] = Field(default_factory=list)
     null_rate_violations: Dict[str, float] = Field(default_factory=dict)
@@ -443,7 +459,6 @@ def table_to_safe_pydict(table: pa.Table) -> Dict[str, List[Any]]:
         else:
             pydict[col_name] = col.to_pylist()
     return pydict
-
 
 
 class OnlineStoreConfig(BaseModel):

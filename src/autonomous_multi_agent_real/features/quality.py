@@ -128,6 +128,7 @@ class FeatureQualityEngine:
         self,
         data: Union[pa.Table, Sequence[FeatureVector]],
         max_null_rate: float = 0.20,
+        dataset_name: str = "feature_dataset",
     ) -> FeatureQualityReport:
         """Audit features against schema rules, completeness requirements, and domain bounds."""
         stats = self.compute_all_statistics(data)
@@ -169,13 +170,40 @@ class FeatureQualityEngine:
             and len(range_violations) == 0
         )
 
+        num_records = (
+            len(data)
+            if isinstance(data, list)
+            else (data.num_rows if hasattr(data, "num_rows") else 0)
+        )
+        total_violations = len(missing_features) + len(null_rate_violations) + len(range_violations)
+        total_checked = max(1, len(self.registry.list_features()))
+        score = max(0.0, min(1.0, 1.0 - (total_violations / total_checked)))
+
         return FeatureQualityReport(
             is_valid=is_valid,
-            total_features_checked=len(self.registry.list_features()),
+            dataset_name=dataset_name,
+            total_records=num_records,
+            valid_records=num_records if is_valid else max(0, num_records - total_violations),
+            invalid_records=0 if is_valid else min(num_records, total_violations),
+            overall_quality_score=round(score, 4),
+            total_features_checked=total_checked,
             missing_features=missing_features,
             null_rate_violations=null_rate_violations,
             range_violations=range_violations,
             validation_timestamp=datetime.now(timezone.utc),
+        )
+
+    def audit_dataset(
+        self,
+        vectors: Sequence[FeatureVector],
+        dataset_name: str = "feature_dataset",
+        max_null_rate: float = 0.20,
+    ) -> FeatureQualityReport:
+        """Alias for audit_quality specifically handling feature vectors."""
+        return self.audit_quality(
+            data=vectors,
+            max_null_rate=max_null_rate,
+            dataset_name=dataset_name,
         )
 
     def detect_drift(

@@ -262,6 +262,8 @@ class FeatureExtractor:
             raw_features["avg_unit_sqft"] = sqft / unit_count
             raw_features["opex_per_unit"] = total_opex / unit_count
             raw_features["rehab_per_unit"] = rehab / unit_count
+            raw_features["price_per_unit"] = price / unit_count
+            raw_features["purchase_price_per_unit"] = price / unit_count
 
         loss_to_lease = max(0.0, mkt_monthly_rent - curr_monthly_rent) * 12.0
         raw_features["loss_to_lease_annual"] = loss_to_lease
@@ -314,6 +316,7 @@ class FeatureExtractor:
             features["equity_required"] = eq_req
             features["ltv_ratio"] = ltv
             features["dscr_year1"] = dscr
+            features["underwritten_dscr"] = dscr
             features["debt_yield"] = dy
             features["annual_debt_service"] = debt_service
 
@@ -435,6 +438,15 @@ class FeatureExtractor:
                     or getattr(wf, "total_promote_dollars", 0.0)
                 )
 
+        # 6. Committee Synthesis & Composite Score
+        committee_score = getattr(underwrite_result, "committee_score", None) or (
+            underwrite_result.get("committee_score")
+            if isinstance(underwrite_result, dict)
+            else None
+        )
+        if committee_score is not None:
+            features["composite_deal_score"] = float(committee_score)
+
         # Re-run derived feature computation
         enriched = self.registry.compute_derived(features)
 
@@ -548,4 +560,3 @@ class FeatureExtractor:
     ) -> List[FeatureRecord]:
         """Alias for extract_records passing deal and optional context."""
         return self.extract_records(deal, underwrite_result=context, source=source)
-

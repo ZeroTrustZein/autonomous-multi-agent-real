@@ -85,8 +85,9 @@ class PipelineFeatureInterceptor:
         if not deal:
             return
 
-        final_vector = self.extractor.extract_deal_features(deal, context=context)
-        final_records = self.extractor.extract_deal_records(deal, context=context)
+        target_context = underwriting_result or context
+        final_vector = self.extractor.extract_deal_features(deal, context=target_context)
+        final_records = self.extractor.extract_deal_records(deal, context=target_context)
 
         if self.online_store:
             self.online_store.put_vector(final_vector)

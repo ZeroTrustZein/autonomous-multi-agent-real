@@ -20,6 +20,11 @@ from autonomous_multi_agent_real.cli.formatters import (
     render_debate_transcript,
     render_diff_table,
     render_executive_panel,
+    render_feature_metadata_panel,
+    render_feature_quality_panel,
+    render_feature_registry_table,
+    render_feature_store_status_panel,
+    render_feature_vector_table,
     render_metrics_table,
     render_monte_carlo_table,
     render_optimizer_panel,
@@ -28,6 +33,7 @@ from autonomous_multi_agent_real.cli.formatters import (
     render_scenario_table,
     render_sensitivity_table,
     render_tax_table,
+    render_training_dataset_summary,
     render_waterfall_table,
 )
 from autonomous_multi_agent_real.cli.interactive import run_interactive_session
@@ -39,6 +45,12 @@ from autonomous_multi_agent_real.engine.waterfall import (
     get_default_waterfall_structure,
 )
 from autonomous_multi_agent_real.engine.workflow import DealPipeline
+from autonomous_multi_agent_real.features.coordinator import (
+    FeatureStoreCoordinator,
+    create_feature_store,
+)
+from autonomous_multi_agent_real.features.registry import get_default_registry
+from autonomous_multi_agent_real.features.types import FeatureCategory
 from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
 from autonomous_multi_agent_real.reporting.exporter import DataExporter
 from autonomous_multi_agent_real.reporting.memo import InvestmentMemoGenerator

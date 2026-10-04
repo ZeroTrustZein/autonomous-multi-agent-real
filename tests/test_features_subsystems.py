@@ -13,35 +13,31 @@ Covers:
 
 from __future__ import annotations
 
-import math
 import shutil
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import pytest
+
 import pyarrow as pa
-import pyarrow.parquet as pq
+import pytest
 
 from autonomous_multi_agent_real.engine.workflow import DealPipeline
 from autonomous_multi_agent_real.features.buffer import StreamFeatureBuffer
 from autonomous_multi_agent_real.features.coordinator import (
-    FeatureStoreCoordinator,
     create_feature_store,
 )
 from autonomous_multi_agent_real.features.enricher import FeatureContextEnricher
 from autonomous_multi_agent_real.features.extractor import FeatureExtractor
 from autonomous_multi_agent_real.features.interceptor import PipelineFeatureInterceptor
 from autonomous_multi_agent_real.features.materialization import MaterializationEngine
-from autonomous_multi_agent_real.features.quality import FeatureQualityEngine
-from autonomous_multi_agent_real.features.registry import FeatureRegistry, get_default_registry
+from autonomous_multi_agent_real.features.registry import FeatureRegistry
 from autonomous_multi_agent_real.features.serving import (
     FeatureServingService,
     OnlineFeatureStore,
 )
 from autonomous_multi_agent_real.features.storage import ParquetFeatureStore
 from autonomous_multi_agent_real.features.training import (
-    TrainingDataset,
     TrainingDatasetGenerator,
 )
 from autonomous_multi_agent_real.features.types import (
@@ -52,12 +48,8 @@ from autonomous_multi_agent_real.features.types import (
     FeatureRecord,
     FeatureStreamEvent,
     FeatureVector,
-    MaterializationJob,
     ObservationTarget,
     OnlineStoreConfig,
-    ParquetPartitionSpec,
-    PartitionStrategy,
-    StreamBufferConfig,
 )
 from autonomous_multi_agent_real.storage.repository import DealRepository, get_benchmark_deals
 from autonomous_multi_agent_real.types import (
@@ -292,9 +284,7 @@ def test_feature_serving_service_multi_tier_fallback(temp_dir):
 def test_feature_serving_batch_and_matrix():
     """Verify batch retrieval and 2D feature matrix generation."""
     online_store = OnlineFeatureStore()
-    online_store.put_vector(
-        FeatureVector(entity_id="d1", features={"cap_rate": 0.05, "dscr": 1.4})
-    )
+    online_store.put_vector(FeatureVector(entity_id="d1", features={"cap_rate": 0.05, "dscr": 1.4}))
     online_store.put_vector(
         FeatureVector(entity_id="d2", features={"cap_rate": 0.06, "dscr": 1.25})
     )
