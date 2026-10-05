@@ -21,6 +21,7 @@ This document provides a comprehensive API reference for all packages, modules, 
 13. [Reporting & Data Export (`autonomous_multi_agent_real.reporting`)](#13-reporting--data-export-autonomous_multi_agent_realreporting)
 14. [Deal Storage & Audit Repository (`autonomous_multi_agent_real.storage`)](#14-deal-storage--audit-repository-autonomous_multi_agent_realstorage)
 15. [Command-Line Interface Commands (`autonomous_multi_agent_real.cli`)](#15-command-line-interface-commands-autonomous_multi_agent_realcli)
+16. [Feature Store Subsystem (`autonomous_multi_agent_real.features`)](#16-feature-store-subsystem-autonomous_multi_agent_realfeatures)
 
 ---
 
@@ -579,3 +580,412 @@ class DealRepository:
 | `export` | Export underwriting output to CSV/JSON | `-d/--deal-id`, `-f/--format`, `-o/--out` |
 | `deal` | Manage repository, diffs, & revisions | `import`, `export`, `delete`, `revisions`, `create-revision`, `diff`, `revert` |
 | `interactive` | Launch interactive terminal shell | *(None)* |
+| `features` | Real-time feature store inspection & ML dataset operations | `status`, `list`, `show`, `inspect`, `backfill`, `sync`, `audit`, `dataset` |
+
+---
+
+## 16. Feature Store Subsystem (`autonomous_multi_agent_real.features`)
+
+The Feature Store subsystem provides an institutional-grade, dual-tier feature store architecture combining streaming ingestion, in-memory low-latency serving, partitioned offline Apache Parquet persistence, point-in-time historical joins, statistical drift monitoring, and automated pipeline interception.
+
+### 16.1 Domain Models & Types (`autonomous_multi_agent_real.features.types`)
+
+#### Enums
+
+* **`FeatureDataType(str, Enum)`**: Supported primitive and composite data types:
+  * `FLOAT = "float"`
+  * `INT = "int"`
+  * `STRING = "string"`
+  * `BOOLEAN = "boolean"`
+  * `TIMESTAMP = "timestamp"`
+  * `VECTOR = "vector"`
+  * `JSON = "json"`
+  * Method: `to_arrow_type() -> pa.DataType` converts to native PyArrow representation.
+
+* **`FeatureCategory(str, Enum)`**: Domain taxonomy for underwriting features:
+  * `PROPERTY = "property"`
+  * `FINANCIAL = "financial"`
+  * `MARKET = "market"`
+  * `DEBT = "debt"`
+  * `RISK = "risk"`
+  * `LOCATION = "location"`
+  * `DERIVED = "derived"`
+  * `TIME_SERIES = "time_series"`
+
+* **`FeatureTimeWindow(str, Enum)`**: Window intervals for streaming aggregations:
+  * `REALTIME = "realtime"`
+  * `HOURLY = "1h"`
+  * `DAILY = "24h"`
+  * `WEEKLY = "7d"`
+  * `MONTHLY = "30d"`
+  * `QUARTERLY = "90d"`
+  * `ALL_TIME = "all_time"`
+
+* **`FeatureStreamStatus(str, Enum)`**: Lifecycle statuses for in-flight streaming records:
+  * `BUFFERED = "buffered"`
+  * `INGESTING = "ingesting"`
+  * `COMMITTED = "committed"`
+  * `FAILED = "failed"`
+  * `DEAD_LETTER = "dead_letter"`
+
+#### Pydantic Schemas
+
+```python
+class FeatureMetadata(BaseModel):
+    name: str
+    category: FeatureCategory
+    data_type: FeatureDataType = FeatureDataType.FLOAT
+    description: str = ""
+    unit: Optional[str] = None
+    is_nullable: bool = True
+    tags: List[str] = Field(default_factory=list)
+    version: str = "1.0.0"
+    window: FeatureTimeWindow = FeatureTimeWindow.REALTIME
+    created_at: datetime
+    min_value: Optional[float] = None
+    max_value: Optional[float] = None
+    # Properties & methods:
+    # is_derived -> bool
+    # to_arrow_field() -> pa.Field
+
+class FeatureValue(BaseModel):
+    feature_name: str
+    value: Any
+    data_type: Optional[FeatureDataType] = None
+    confidence: float = 1.0  # [0.0, 1.0]
+    timestamp: datetime
+
+class FeatureRecord(BaseModel):
+    entity_id: str
+    entity_type: str = "deal"
+    feature_name: str
+    value: Any
+    timestamp: datetime
+    source: str = "pipeline"
+    partition_key: Optional[str] = None
+
+class FeatureVector(BaseModel):
+    entity_id: str
+    entity_type: str = "deal"
+    features: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime
+    schema_version: str = "1.0.0"
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    # Methods: get(), has_feature(), to_dict(), to_numeric_array()
+
+class FeatureStreamEvent(BaseModel):
+    event_id: str
+    event_type: str = "feature_update"
+    stream_name: str = "real_estate_underwriting_stream"
+    entity_id: str
+    entity_type: str = "deal"
+    payload: Dict[str, Any]
+    event_time: datetime
+    status: FeatureStreamStatus = FeatureStreamStatus.BUFFERED
+    retry_count: int = 0
+    error_message: Optional[str] = None
+
+class StreamBufferConfig(BaseModel):
+    buffer_size: int = 1000
+    flush_interval_seconds: float = 5.0
+    max_retries: int = 3
+    dead_letter_queue_enabled: bool = True
+
+class ParquetPartitionSpec(BaseModel):
+    partition_columns: List[str] = ["year", "month"]
+    row_group_size: int = 10000
+    compression: str = "SNAPPY"
+
+class OnlineStoreConfig(BaseModel):
+    ttl_seconds: int = 86400
+    max_entities: int = 10000
+    eviction_policy: str = "LRU"
+
+class FeatureStatistics(BaseModel):
+    feature_name: str
+    count: int
+    null_count: int
+    null_rate: float
+    mean: Optional[float] = None
+    std: Optional[float] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    p25: Optional[float] = None
+    p50: Optional[float] = None
+    p75: Optional[float] = None
+    p90: Optional[float] = None
+    p99: Optional[float] = None
+
+class FeatureQualityReport(BaseModel):
+    is_valid: bool = True
+    dataset_name: str = "feature_dataset"
+    total_records: int = 0
+    valid_records: int = 0
+    invalid_records: int = 0
+    overall_quality_score: float = 1.0
+    total_features_checked: int = 0
+    missing_features: List[str] = Field(default_factory=list)
+    null_rate_violations: Dict[str, float] = Field(default_factory=dict)
+    range_violations: Dict[str, str] = Field(default_factory=dict)
+    validation_timestamp: datetime
+
+class MaterializationJob(BaseModel):
+    job_id: str
+    status: str  # "completed", "failed", "running"
+    source: str
+    destination: str
+    records_processed: int = 0
+    features_count: int = 0
+    entities_count: int = 0
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: float = 0.0
+    error_message: Optional[str] = None
+
+class ObservationTarget(BaseModel):
+    entity_id: str
+    timestamp: datetime
+    target_value: Optional[float] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+```
+
+#### PyArrow Helper Functions
+
+```python
+def to_arrow_schema(definitions: Sequence[FeatureMetadata]) -> pa.Schema: ...
+def feature_vectors_to_arrow_table(vectors: Sequence[FeatureVector], schema: Optional[pa.Schema] = None) -> pa.Table: ...
+def feature_records_to_arrow_table(records: Sequence[FeatureRecord]) -> pa.Table: ...
+def table_to_safe_pydict(table: pa.Table) -> Dict[str, List[Any]]: ...
+```
+
+---
+
+### 16.2 Feature Registry (`autonomous_multi_agent_real.features.registry`)
+
+The central schema registry governing definition, registration, versioning, derivation rules, and constraints for all feature dimensions.
+
+```python
+class FeatureRegistry:
+    def __init__(self) -> None: ...
+    def register(self, metadata: FeatureMetadata) -> None: ...
+    def register_derived(self, metadata: FeatureMetadata, compute_fn: Callable[[Dict[str, Any]], Any]) -> None: ...
+    def get(self, name: str) -> Optional[FeatureMetadata]: ...
+    def list_features(self, category: Optional[FeatureCategory] = None, tags: Optional[List[str]] = None) -> List[FeatureMetadata]: ...
+    def compute_derived_features(self, raw_features: Dict[str, Any]) -> Dict[str, Any]: ...
+    def validate_features(self, features: Dict[str, Any], allow_missing: bool = True) -> Tuple[bool, List[str]]: ...
+    def get_arrow_schema(self, feature_names: Optional[Sequence[str]] = None) -> pa.Schema: ...
+    def to_dict(self) -> Dict[str, Any]: ...
+    def from_dict(self, data: Dict[str, Any]) -> None: ...
+
+def get_default_registry() -> FeatureRegistry:
+    """Return singleton institutional registry populated with underwriting metrics:
+    cap_rate, in_place_noi, stabilized_noi, dscr, ltv, debt_yield,
+    gross_rent_multiplier, expense_ratio, break_even_occupancy,
+    purchase_price_per_unit, purchase_price_per_sqft, and derived ratios.
+    """
+```
+
+---
+
+### 16.3 Feature Extraction & Streaming Aggregator (`autonomous_multi_agent_real.features.extractor`)
+
+Extracts normalized feature vectors and atomic records from raw domain objects (`PropertyDeal`, `UnderwritingResult`), dictionaries, and streaming events.
+
+```python
+class FeatureExtractor:
+    def __init__(self, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def extract_deal_features(self, deal: PropertyDeal, context: Optional[Any] = None) -> FeatureVector: ...
+    def extract_deal_records(self, deal: PropertyDeal, context: Optional[Any] = None) -> List[FeatureRecord]: ...
+    def extract_from_underwrite(self, deal: PropertyDeal, underwrite_result: Any) -> FeatureVector: ...
+    def extract_from_dict(self, data: Dict[str, Any], entity_id: str, entity_type: str = "deal") -> FeatureVector: ...
+    def extract_from_stream_event(self, event: FeatureStreamEvent) -> FeatureVector: ...
+
+class WindowedAggregator:
+    def __init__(self, window_size_seconds: float = 3600.0) -> None: ...
+    def add_observation(self, feature_name: str, value: float, timestamp: Optional[datetime] = None) -> None: ...
+    def get_window_statistics(self, feature_name: str, as_of: Optional[datetime] = None) -> Dict[str, float]: ...
+    def get_all_statistics(self, as_of: Optional[datetime] = None) -> Dict[str, Dict[str, float]]: ...
+    def clean_expired(self, current_time: Optional[datetime] = None) -> int: ...
+```
+
+---
+
+### 16.4 Storage Engines: Columnar Parquet & Low-Latency Online Store (`storage.py`, `serving.py`)
+
+#### `ParquetFeatureStore`
+Provides partitioned, columnar disk storage for offline analytics, time-travel point-in-time queries, and batch training data compilation.
+
+```python
+class ParquetFeatureStore:
+    def __init__(self, base_path: Union[str, Path], partition_spec: Optional[ParquetPartitionSpec] = None, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def write_vectors(self, vectors: Sequence[FeatureVector]) -> int: ...
+    def write_records(self, records: Sequence[FeatureRecord]) -> int: ...
+    def query(self, entity_ids: Optional[Sequence[str]] = None, feature_names: Optional[Sequence[str]] = None, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> pa.Table: ...
+    def query_as_of(self, entity_id: str, as_of_time: datetime, feature_names: Optional[Sequence[str]] = None) -> Optional[FeatureVector]: ...
+    def get_latest_vector(self, entity_id: str) -> Optional[FeatureVector]: ...
+    def compact_partitions(self) -> int: ...
+```
+
+#### `OnlineFeatureStore` & `FeatureServingService`
+Provides high-throughput sub-millisecond feature vector retrieval backed by an in-memory thread-safe LRU cache with TTL expiration.
+
+```python
+class OnlineFeatureStore:
+    def __init__(self, config: Optional[OnlineStoreConfig] = None) -> None: ...
+    def put_vector(self, vector: FeatureVector) -> None: ...
+    def put_record(self, record: FeatureRecord) -> None: ...
+    def put_records(self, records: Sequence[FeatureRecord]) -> None: ...
+    def get_feature(self, entity_id: str, feature_name: str) -> Optional[Any]: ...
+    def get_vector(self, entity_id: str) -> Optional[FeatureVector]: ...
+    def get_batch_vectors(self, entity_ids: Sequence[str]) -> Dict[str, FeatureVector]: ...
+    def delete_entity(self, entity_id: str) -> bool: ...
+    def clear(self) -> None: ...
+    def size(self) -> int: ...
+
+class FeatureServingService:
+    def __init__(self, online_store: OnlineFeatureStore, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
+    def get_online_features(self, entity_id: str, feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal", fallback_to_offline: bool = True) -> Dict[str, Any]: ...
+    def get_feature_vector(self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True) -> Optional[FeatureVector]: ...
+    def get_batch_features(self, entity_ids: Sequence[str], feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal") -> Dict[str, Dict[str, Any]]: ...
+    def get_feature_matrix(self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal") -> Dict[str, List[Any]]: ...
+```
+
+---
+
+### 16.5 Streaming Buffer & Materialization Engine (`buffer.py`, `materialization.py`)
+
+#### `StreamFeatureBuffer`
+Thread-safe ingestion buffer handling micro-batches, backpressure, watermarks, and dead-letter queues.
+
+```python
+class StreamFeatureBuffer:
+    def __init__(self, config: Optional[StreamBufferConfig] = None, on_flush: Optional[Callable[[List[FeatureStreamEvent]], None]] = None) -> None: ...
+    def push_event(self, event: FeatureStreamEvent) -> bool: ...
+    def push_vector(self, vector: FeatureVector) -> bool: ...
+    def push_record(self, record: FeatureRecord) -> bool: ...
+    def flush(self) -> List[FeatureStreamEvent]: ...
+    def drain_dead_letter_queue(self) -> List[FeatureStreamEvent]: ...
+    def size(self) -> int: ...
+```
+
+#### `MaterializationEngine`
+Coordinates asynchronous or on-demand synchronization between in-memory streaming buffers, offline Parquet storage, and online cache.
+
+```python
+class MaterializationEngine:
+    def __init__(self, offline_store: ParquetFeatureStore, online_store: OnlineFeatureStore, buffer: Optional[StreamFeatureBuffer] = None, extractor: Optional[FeatureExtractor] = None) -> None: ...
+    def materialize_to_online(self, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None, entity_ids: Optional[Sequence[str]] = None) -> MaterializationJob: ...
+    def flush_buffer_to_parquet(self) -> MaterializationJob: ...
+    def backfill_deals(self, deals: Sequence[PropertyDeal], sync_online: bool = True) -> MaterializationJob: ...
+    def sync_audit(self) -> Dict[str, Any]: ...
+```
+
+---
+
+### 16.6 Training Dataset Generator (`autonomous_multi_agent_real.features.training`)
+
+Compiles point-in-time feature tables joined to observation targets while strictly preventing data leakage across historical underwriting milestones.
+
+```python
+class TrainingDataset(BaseModel):
+    name: str
+    feature_names: List[str]
+    target_column: Optional[str] = None
+    train_vectors: List[FeatureVector] = Field(default_factory=list)
+    val_vectors: List[FeatureVector] = Field(default_factory=list)
+    test_vectors: List[FeatureVector] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    # Methods: to_arrow_table(), to_dict(), export_parquet()
+
+class TrainingDatasetGenerator:
+    def __init__(self, offline_store: ParquetFeatureStore, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def build_dataset(
+        self,
+        observations: Sequence[ObservationTarget],
+        dataset_name: str,
+        feature_names: Optional[Sequence[str]] = None,
+        train_ratio: float = 0.7,
+        val_ratio: float = 0.15,
+        test_ratio: float = 0.15,
+    ) -> TrainingDataset: ...
+    def compute_feature_correlations(self, dataset: TrainingDataset) -> Dict[str, Dict[str, float]]: ...
+```
+
+---
+
+### 16.7 Feature Quality & Statistical Drift Engine (`autonomous_multi_agent_real.features.quality`)
+
+Performs statistical profiling, boundary constraint validation, and drift analysis.
+
+```python
+class FeatureQualityEngine:
+    def __init__(self, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def compute_statistics(self, vectors: Sequence[FeatureVector]) -> Dict[str, FeatureStatistics]: ...
+    def audit_dataset(self, vectors: Sequence[FeatureVector], dataset_name: str = "dataset") -> FeatureQualityReport: ...
+    def detect_drift(
+        self,
+        baseline_vectors: Sequence[FeatureVector],
+        current_vectors: Sequence[FeatureVector],
+        threshold_p_value: float = 0.05,
+    ) -> Dict[str, Any]: ...
+```
+
+---
+
+### 16.8 Context Enrichment & Pipeline Interception (`enricher.py`, `interceptor.py`)
+
+#### `FeatureContextEnricher`
+Augments raw deals with peer-cohort percentiles, z-scores, and benchmark spreads for institutional comparative underwriting.
+
+```python
+class FeatureContextEnricher:
+    def __init__(self, extractor: FeatureExtractor, online_store: Optional[OnlineFeatureStore] = None, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
+    def enrich_deal(self, deal: PropertyDeal, cohort_deals: Optional[Sequence[PropertyDeal]] = None, cohort_name: str = "default_cohort") -> EnrichedFeatureContext: ...
+```
+
+#### `PipelineFeatureInterceptor`
+Provides non-invasive hooks attaching to `DealPipeline` stage events to automatically extract, validate, and persist features into the feature store during live underwriting execution.
+
+```python
+class PipelineFeatureInterceptor:
+    def __init__(self, extractor: FeatureExtractor, buffer: Optional[StreamFeatureBuffer] = None, online_store: Optional[OnlineFeatureStore] = None, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
+    def attach_to_pipeline(self, pipeline: Any) -> None: ...
+    def on_deal_started(self, deal: PropertyDeal) -> None: ...
+    def on_stage_completed(self, stage_name: str, deal: PropertyDeal, context: Any) -> None: ...
+    def on_deal_completed(self, deal: PropertyDeal, underwrite_result: Any) -> FeatureVector: ...
+```
+
+---
+
+### 16.9 Master Subsystem Coordinator Facade (`autonomous_multi_agent_real.features.coordinator`)
+
+Unified singleton/facade exposing all capabilities across the streaming, storage, serving, and quality subsystems through a clean API.
+
+```python
+class FeatureStoreCoordinator:
+    def __init__(
+        self,
+        base_path: Union[str, Path],
+        registry: Optional[FeatureRegistry] = None,
+        partition_spec: Optional[ParquetPartitionSpec] = None,
+        online_config: Optional[OnlineStoreConfig] = None,
+        buffer_config: Optional[StreamBufferConfig] = None,
+    ) -> None: ...
+
+    def extract_and_persist(self, deal: PropertyDeal, context: Optional[Any] = None, sync_online: bool = True) -> FeatureVector: ...
+    def get_features(self, entity_id: str, feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal", fallback_to_offline: bool = True) -> Dict[str, Any]: ...
+    def get_feature_vector(self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True) -> Optional[FeatureVector]: ...
+    def get_batch_features(self, entity_ids: Sequence[str], feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal") -> Dict[str, Dict[str, Any]]: ...
+    def get_feature_matrix(self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal") -> Dict[str, List[Any]]: ...
+    def enrich_deal(self, deal: PropertyDeal, cohort_deals: Optional[Sequence[PropertyDeal]] = None, cohort_name: str = "default_cohort") -> EnrichedFeatureContext: ...
+    def materialize_to_online(self, start_time: Optional[Any] = None, end_time: Optional[Any] = None, entity_ids: Optional[Sequence[str]] = None) -> MaterializationJob: ...
+    def flush_buffer(self) -> MaterializationJob: ...
+    def backfill_deals(self, deals: Sequence[PropertyDeal], sync_online: bool = True) -> MaterializationJob: ...
+    def build_training_dataset(self, observations: Sequence[ObservationTarget], dataset_name: str, feature_names: Optional[Sequence[str]] = None, train_ratio: float = 0.7, val_ratio: float = 0.15, test_ratio: float = 0.15) -> TrainingDataset: ...
+    def audit_quality(self, entity_ids: Optional[Sequence[str]] = None) -> FeatureQualityReport: ...
+    def audit_sync(self) -> Dict[str, Any]: ...
+    def get_status(self) -> Dict[str, Any]: ...
+
+def create_feature_store(base_path: Optional[Union[str, Path]] = None) -> FeatureStoreCoordinator:
+    """Instantiate and initialize default coordinator rooted at base_path or .feature_store."""
+```

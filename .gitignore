@@ -68,3 +68,6 @@ venv.bak/
 *.log
 deals_data/
 simulation_output/
+feature_store/
+.features_cache/
+*.parquet

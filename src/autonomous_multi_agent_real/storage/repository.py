@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -425,3 +425,18 @@ class DealRepository:
     def list_portfolios(self) -> List[Dict[str, Any]]:
         """List all stored portfolios."""
         return list(self._portfolios.values())
+
+    # ------------------ Feature Store Integration ------------------
+
+    def sync_to_feature_store(
+        self,
+        coordinator: Any,
+        deal_ids: Optional[Sequence[str]] = None,
+    ) -> Any:
+        """Extract and persist features from repository deals into the feature store coordinator."""
+        target_deals = (
+            [self._deals[did] for did in deal_ids if did in self._deals]
+            if deal_ids is not None
+            else self.list_deals()
+        )
+        return coordinator.backfill_deals(target_deals)

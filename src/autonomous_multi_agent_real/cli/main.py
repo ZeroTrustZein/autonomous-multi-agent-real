@@ -20,6 +20,11 @@ from autonomous_multi_agent_real.cli.formatters import (
     render_debate_transcript,
     render_diff_table,
     render_executive_panel,
+    render_feature_metadata_panel,
+    render_feature_quality_panel,
+    render_feature_registry_table,
+    render_feature_store_status_panel,
+    render_feature_vector_table,
     render_metrics_table,
     render_monte_carlo_table,
     render_optimizer_panel,
@@ -28,6 +33,7 @@ from autonomous_multi_agent_real.cli.formatters import (
     render_scenario_table,
     render_sensitivity_table,
     render_tax_table,
+    render_training_dataset_summary,
     render_waterfall_table,
 )
 from autonomous_multi_agent_real.cli.interactive import run_interactive_session
@@ -39,6 +45,11 @@ from autonomous_multi_agent_real.engine.waterfall import (
     get_default_waterfall_structure,
 )
 from autonomous_multi_agent_real.engine.workflow import DealPipeline
+from autonomous_multi_agent_real.features.coordinator import (
+    create_feature_store,
+)
+from autonomous_multi_agent_real.features.registry import get_default_registry
+from autonomous_multi_agent_real.features.types import FeatureCategory
 from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
 from autonomous_multi_agent_real.reporting.exporter import DataExporter
 from autonomous_multi_agent_real.reporting.memo import InvestmentMemoGenerator
@@ -875,6 +886,264 @@ def deal_revert(deal_id: str, rev: int):
         console.print(f"[green]Successfully reverted deal '{deal_id}' to revision {rev}.[/green]")
     else:
         console.print(f"[red]Revision {rev} not found for deal '{deal_id}'.[/red]")
+
+
+# --------------------------------------------------------------------------
+# Feature Store Subgroup
+# --------------------------------------------------------------------------
+
+
+@cli.group(name="features")
+def features_group():
+    """Real-time institutional feature store management and inspection."""
+    pass
+
+
+@features_group.command(name="status")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+def features_status_cmd(store_path: Optional[str]):
+    """Display operational status and health across offline, online, and buffer tiers."""
+    coord = create_feature_store(base_path=store_path)
+    status = coord.get_status()
+    render_feature_store_status_panel(status, console)
+
+
+@features_group.command(name="list")
+@click.option(
+    "--category",
+    "-c",
+    type=click.Choice(
+        ["property", "market", "debt", "cashflow", "risk", "waterfall", "macro"],
+        case_sensitive=False,
+    ),
+    default=None,
+    help="Filter features by category.",
+)
+@click.option(
+    "--tag",
+    "-t",
+    default=None,
+    help="Filter features by tag (e.g. yield, risk, leverage).",
+)
+def features_list_cmd(category: Optional[str], tag: Optional[str]):
+    """List registered features in the feature registry."""
+    reg = get_default_registry()
+    cat_enum = None
+    if category:
+        try:
+            cat_enum = FeatureCategory(category.lower())
+        except ValueError:
+            pass
+
+    tags_list = [tag] if tag else None
+    features = reg.list_features(category=cat_enum, tags=tags_list)
+    title = f"Institutional Feature Store - Registered Features ({len(features)})"
+    render_feature_registry_table(features, console, title=title)
+
+
+@features_group.command(name="show")
+@click.argument("feature_name")
+def features_show_cmd(feature_name: str):
+    """Inspect detailed metadata specification for a single feature."""
+    reg = get_default_registry()
+    meta = reg.get(feature_name)
+    if not meta:
+        console.print(f"[red]Feature '{feature_name}' not found in registry.[/red]")
+        raise click.Abort()
+    render_feature_metadata_panel(meta, console)
+
+
+@features_group.command(name="inspect")
+@click.argument("entity_id")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+@click.option(
+    "--from-deal/--from-store",
+    default=False,
+    help="Extract dynamically from deal repository vs query stored features.",
+)
+def features_inspect_cmd(entity_id: str, store_path: Optional[str], from_deal: bool):
+    """Retrieve and display the current feature vector for a property deal."""
+    coord = create_feature_store(base_path=store_path)
+
+    if from_deal:
+        repo = DealRepository()
+        deal = repo.get_deal(entity_id)
+        if not deal:
+            console.print(f"[red]Deal '{entity_id}' not found in deal repository.[/red]")
+            raise click.Abort()
+        vec = coord.extractor.extract_deal_features(deal)
+    else:
+        vec = coord.get_feature_vector(entity_id=entity_id, fallback_to_offline=True)
+
+    if not vec:
+        console.print(f"[yellow]No features found for entity '{entity_id}'.[/yellow]")
+        return
+
+    render_feature_vector_table(vec, console)
+
+
+@features_group.command(name="backfill")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+@click.option(
+    "--deal-id",
+    "-d",
+    default=None,
+    help="Target specific deal ID to backfill, or all if omitted.",
+)
+def features_backfill_cmd(store_path: Optional[str], deal_id: Optional[str]):
+    """Extract and persist features for repository deals into offline and online stores."""
+    repo = DealRepository()
+    if deal_id:
+        deal = repo.get_deal(deal_id)
+        if not deal:
+            console.print(f"[red]Deal '{deal_id}' not found.[/red]")
+            raise click.Abort()
+        deals = [deal]
+    else:
+        deals = repo.list_deals()
+
+    coord = create_feature_store(base_path=store_path)
+    console.print(f"[cyan]Backfilling features across {len(deals)} deals...[/cyan]")
+    job = coord.backfill_deals(deals, sync_online=True)
+    console.print(
+        f"[green]Backfill job {job.job_id} {job.status}: {job.entities_count} entities materialized ({job.features_count} records).[/green]"
+    )
+
+
+@features_group.command(name="sync")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+def features_sync_cmd(store_path: Optional[str]):
+    """Synchronize offline Parquet features into online low-latency cache and flush buffer."""
+    coord = create_feature_store(base_path=store_path)
+    console.print("[cyan]Flushing in-memory buffer to Parquet...[/cyan]")
+    flush_job = coord.flush_buffer()
+    console.print(f"[green]Buffer flush completed: {flush_job.features_count} records saved.[/green]")
+
+    console.print("[cyan]Materializing offline features to online cache...[/cyan]")
+    sync_job = coord.materialize_to_online()
+    console.print(
+        f"[green]Materialization completed: {sync_job.entities_count} entities cached ({sync_job.features_count} records).[/green]"
+    )
+
+
+@features_group.command(name="audit")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+def features_audit_cmd(store_path: Optional[str]):
+    """Run data quality, completeness, and boundary constraint audit."""
+    coord = create_feature_store(base_path=store_path)
+    report = coord.audit_quality()
+    render_feature_quality_panel(report, console)
+
+    sync_audit = coord.audit_sync()
+    console.print(
+        f"[dim]Parity Audit: {sync_audit.get('matched_entities', 0)}/{sync_audit.get('total_checked', 0)} entities matched (parity ratio: {sync_audit.get('parity_ratio', 0.0):.1%})[/dim]"
+    )
+
+
+@features_group.command(name="dataset")
+@click.option(
+    "--store-path",
+    "-p",
+    default=None,
+    help="Custom feature store directory path.",
+)
+@click.option(
+    "--name",
+    "-n",
+    default="deal_benchmark_dataset",
+    help="Name of compiled training dataset.",
+)
+@click.option(
+    "--target",
+    "-t",
+    default="in_place_noi",
+    help="Target prediction feature column.",
+)
+@click.option(
+    "--out-dir",
+    "-o",
+    default=None,
+    help="Export dataset parquet partitions to output directory.",
+)
+def features_dataset_cmd(
+    store_path: Optional[str],
+    name: str,
+    target: str,
+    out_dir: Optional[str],
+):
+    """Compile point-in-time training dataset from stored historical deals."""
+    from autonomous_multi_agent_real.features.types import ObservationTarget
+
+    coord = create_feature_store(base_path=store_path)
+    repo = DealRepository()
+    deals = repo.list_deals()
+    if not deals:
+        console.print("[yellow]No deals available in repository to construct observations.[/yellow]")
+        return
+
+    # Backfill repository deals first so offline store has vectors
+    coord.backfill_deals(deals, sync_online=False)
+
+    observations = []
+    for d in deals:
+        vec = coord.extractor.extract_deal_features(d)
+        target_val = vec.features.get(target, 0.0)
+        observations.append(
+            ObservationTarget(
+                entity_id=d.id,
+                timestamp=vec.timestamp,
+                label_name=target,
+                label_value=target_val,
+            )
+        )
+
+    feature_names = ["unit_count", "purchase_price", "current_occupancy_pct", "operating_expenses"]
+    ds = coord.build_training_dataset(
+        observations=observations,
+        dataset_name=name,
+        feature_names=feature_names,
+    )
+
+    summary = {
+        "dataset_name": name,
+        "total_records": ds.total_records,
+        "target_feature": target,
+        "train_records": ds.metadata.train_count,
+        "val_records": ds.metadata.val_count,
+        "test_records": ds.metadata.test_count,
+        "correlations": ds.compute_correlations(),
+    }
+    render_training_dataset_summary(summary, console)
+
+    if out_dir:
+        out_p = Path(out_dir)
+        exported_files = ds.export_parquet(out_p)
+        console.print(f"[green]Dataset exported to: {out_p.resolve()} ({len(exported_files)} splits)[/green]")
 
 
 @cli.command(name="interactive")

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from autonomous_multi_agent_real.collaboration.debate import DebateTranscript
+from autonomous_multi_agent_real.features.types import (
+    FeatureMetadata,
+    FeatureQualityReport,
+    FeatureVector,
+)
 from autonomous_multi_agent_real.portfolio.models import (
     PortfolioRiskProfile,
     PortfolioRollup,
@@ -720,3 +725,245 @@ def render_diff_table(
             f"{v_b:,}" if isinstance(v_b, (int, float)) else str(v_b),
         )
     console.print(table)
+
+
+# --------------------------------------------------------------------------
+# Feature Store Formatters
+# --------------------------------------------------------------------------
+
+
+def render_feature_registry_table(
+    features: List[FeatureMetadata],
+    console: Console,
+    title: str = "Institutional Feature Store - Registered Features",
+) -> None:
+    """Render a formatted table of registered features from FeatureRegistry."""
+    table = Table(
+        title=title,
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Name", style="bold cyan", no_wrap=True)
+    table.add_column("Category", style="green")
+    table.add_column("Data Type", style="yellow")
+    table.add_column("Derived", justify="center")
+    table.add_column("Nullable", justify="center")
+    table.add_column("Tags", style="dim")
+    table.add_column("Description", style="white")
+
+    for f in features:
+        is_derived_val = getattr(f, "is_derived", False)
+        is_derived = "[bold green]YES[/bold green]" if is_derived_val else "[dim]NO[/dim]"
+        is_null = "[dim]YES[/dim]" if f.is_nullable else "[red]NO[/red]"
+        tags_str = ", ".join(f.tags) if f.tags else "-"
+        cat_str = getattr(f.category, "value", str(f.category))
+        dtype_str = getattr(f.data_type, "value", str(f.data_type))
+        desc_str = f.description or ""
+        if len(desc_str) > 50:
+            desc_str = desc_str[:47] + "..."
+
+        table.add_row(
+            f.name,
+            cat_str,
+            dtype_str,
+            is_derived,
+            is_null,
+            tags_str,
+            desc_str,
+        )
+
+    console.print(table)
+
+
+def render_feature_metadata_panel(meta: FeatureMetadata, console: Console) -> None:
+    """Render comprehensive metadata attributes for a single feature."""
+    cat_str = getattr(meta.category, "value", str(meta.category))
+    dtype_str = getattr(meta.data_type, "value", str(meta.data_type))
+    deps_list = getattr(meta, "dependencies", []) or []
+    deps = ", ".join(deps_list) if deps_list else "None"
+    tags = ", ".join(meta.tags) if meta.tags else "None"
+    min_v = f"{meta.min_value:,.2f}" if meta.min_value is not None else "None"
+    max_v = f"{meta.max_value:,.2f}" if meta.max_value is not None else "None"
+    def_v = str(meta.default_value) if meta.default_value is not None else "None"
+    entity_key = getattr(meta, "entity_type", getattr(meta, "entity_key", "deal"))
+    is_derived_val = getattr(meta, "is_derived", False)
+
+    body = (
+        f"[bold cyan]Feature Name:[/bold cyan] {meta.name}\n"
+        f"[bold]Description:[/bold] {meta.description}\n"
+        f"[bold]Category:[/bold] [green]{cat_str}[/green] | "
+        f"[bold]Data Type:[/bold] [magenta]{dtype_str}[/magenta] | "
+        f"[bold]Entity Key:[/bold] {entity_key}\n"
+        f"[bold]Derived:[/bold] {'[green]Yes[/green]' if is_derived_val else 'No'} | "
+        f"[bold]Nullable:[/bold] {'[yellow]Yes[/yellow]' if meta.is_nullable else 'No'} | "
+        f"[bold]Default Value:[/bold] {def_v}\n"
+        f"[bold]Allowed Range:[/bold] [{min_v}, {max_v}] | [bold]Unit:[/bold] {meta.unit or 'N/A'}\n"
+        f"[bold]Dependencies:[/bold] {deps}\n"
+        f"[bold]Tags:[/bold] [dim]{tags}[/dim]"
+    )
+    console.print(
+        Panel(
+            body,
+            title=f"Feature Specification: {meta.name}",
+            border_style="cyan",
+        )
+    )
+
+
+def render_feature_vector_table(
+    vector: FeatureVector,
+    console: Console,
+    title: Optional[str] = None,
+) -> None:
+    """Render a key-value tabular breakdown of a FeatureVector."""
+    tbl_title = title or f"Feature Vector: {vector.entity_id} ({vector.entity_type})"
+    table = Table(
+        title=tbl_title,
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Feature Key", style="white", no_wrap=True)
+    table.add_column("Value", justify="right", style="bold yellow")
+    table.add_column("Format Type", style="dim")
+
+    for k in sorted(vector.features.keys()):
+        val = vector.features[k]
+        if val is None:
+            val_str = "[dim italic]null[/dim italic]"
+            type_str = "null"
+        elif isinstance(val, float):
+            val_str = f"{val:,.4f}" if abs(val) < 1000 else f"{val:,.2f}"
+            type_str = "float"
+        elif isinstance(val, int):
+            val_str = f"{val:,}"
+            type_str = "int"
+        elif isinstance(val, bool):
+            val_str = "[green]True[/green]" if val else "[red]False[/red]"
+            type_str = "bool"
+        else:
+            val_str = str(val)
+            type_str = type(val).__name__
+
+        table.add_row(k, val_str, type_str)
+
+    console.print(table)
+
+
+def render_feature_quality_panel(report: FeatureQualityReport, console: Console) -> None:
+    """Render a data quality, completeness, and boundary validation report."""
+    status_style = "bold green" if report.is_valid else "bold red"
+    status_text = "PASS (CLEAN)" if report.is_valid else "FAIL (DEGRADED)"
+
+    summary_lines = [
+        f"[bold]Quality Assessment Status:[/bold] [{status_style}]{status_text}[/{status_style}]",
+        f"[bold]Dataset:[/bold] {report.dataset_name}",
+        f"[bold]Total Features Audited:[/bold] {report.total_features_checked}",
+        f"[bold]Missing Required Features:[/bold] {len(report.missing_features)}",
+        f"[bold]Null-Rate Violations:[/bold] {len(report.null_rate_violations)}",
+        f"[bold]Range Boundary Violations:[/bold] {len(report.range_violations)}",
+    ]
+
+    console.print(
+        Panel(
+            "\n".join(summary_lines),
+            title=f"Feature Quality Audit: {report.dataset_name}",
+            border_style="green" if report.is_valid else "red",
+        )
+    )
+
+    if report.missing_features:
+        m_table = Table(title="Missing Required Features", header_style="bold red")
+        m_table.add_column("Feature Name", style="red")
+        for mf in report.missing_features:
+            m_table.add_row(mf)
+        console.print(m_table)
+
+    if report.null_rate_violations:
+        n_table = Table(title="Null Rate Threshold Violations", header_style="bold yellow")
+        n_table.add_column("Feature", style="yellow")
+        n_table.add_column("Observed Null Rate", justify="right", style="bold red")
+        for feat, rate in report.null_rate_violations.items():
+            n_table.add_row(feat, f"{rate:.1%}")
+        console.print(n_table)
+
+    if report.range_violations:
+        r_table = Table(title="Range Boundary Violations", header_style="bold magenta")
+        r_table.add_column("Feature", style="magenta")
+        r_table.add_column("Violation Detail", style="white")
+        for feat, detail in report.range_violations.items():
+            r_table.add_row(feat, str(detail))
+        console.print(r_table)
+
+
+def render_feature_store_status_panel(
+    status: Dict[str, Any],
+    console: Console,
+) -> None:
+    """Render operational health and capacity summary of the unified feature store."""
+    offline = status.get("offline_store", {})
+    online = status.get("online_store", {})
+    buf = status.get("buffer", {})
+
+    lines = [
+        "[bold cyan]Offline Parquet Data Lake[/bold cyan]",
+        f"  Path: {offline.get('base_path', 'N/A')}",
+        f"  Total Columnar Files: {offline.get('total_files', 0):,}",
+        f"  Total Persisted Records: {offline.get('total_records', 0):,}",
+        f"  Unique Entities: {offline.get('entity_count', 0):,}",
+        "",
+        "[bold green]Online Low-Latency Key-Value Cache[/bold green]",
+        f"  Cached Vectors: {online.get('cached_entities', 0):,}",
+        f"  Max Capacity: {online.get('max_capacity', 'Unlimited')}",
+        f"  Eviction Policy: {online.get('eviction_policy', 'LRU')}",
+        f"  TTL Seconds: {online.get('ttl_seconds', 'None')}",
+        "",
+        "[bold magenta]Real-Time Streaming Buffer[/bold magenta]",
+        f"  Current In-Memory Records: {buf.get('records_in_buffer', 0):,}",
+        f"  Buffer Capacity: {buf.get('buffer_capacity', 1000):,}",
+        f"  Buffer Utilization: {buf.get('buffer_utilization', 0.0):.1%}",
+        f"  Total Ingested: {buf.get('total_records_ingested', 0):,}",
+        f"  Total Flushes: {buf.get('total_flushes', 0):,}",
+        f"  Dropped Records: {buf.get('dropped_records', 0):,}",
+        f"  Buffer Healthy: {'[green]YES[/green]' if buf.get('is_healthy', True) else '[red]NO[/red]'}",
+    ]
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="Institutional Feature Store - Infrastructure Telemetry",
+            border_style="cyan",
+        )
+    )
+
+
+def render_training_dataset_summary(
+    summary: Dict[str, Any],
+    console: Console,
+) -> None:
+    """Render point-in-time training dataset compilation statistics and correlations."""
+    lines = [
+        f"[bold]Total Observations:[/bold] {summary.get('total_records', 0):,}",
+        f"[bold]Target Feature:[/bold] [bold cyan]{summary.get('target_feature', 'N/A')}[/bold cyan]",
+        f"[bold]Train Split:[/bold] {summary.get('train_records', 0):,} rows",
+        f"[bold]Validation Split:[/bold] {summary.get('val_records', 0):,} rows",
+        f"[bold]Test Split:[/bold] {summary.get('test_records', 0):,} rows",
+    ]
+
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="Point-In-Time Training Dataset Compilation",
+            border_style="magenta",
+        )
+    )
+
+    correlations = summary.get("correlations", {})
+    if correlations:
+        t = Table(title="Feature Correlation with Target", header_style="bold magenta")
+        t.add_column("Feature Name", style="white")
+        t.add_column("Pearson Correlation", justify="right", style="bold yellow")
+        for feat, corr in sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True):
+            style = "bold green" if corr > 0.3 else ("bold red" if corr < -0.3 else "yellow")
+            t.add_row(feat, f"[{style}]{corr:+.4f}[/{style}]")
+        console.print(t)
+

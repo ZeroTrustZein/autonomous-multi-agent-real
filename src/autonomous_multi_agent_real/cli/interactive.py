@@ -17,6 +17,9 @@ from autonomous_multi_agent_real.cli.formatters import (
     render_deals_table,
     render_debate_transcript,
     render_executive_panel,
+    render_feature_registry_table,
+    render_feature_store_status_panel,
+    render_feature_vector_table,
     render_metrics_table,
     render_monte_carlo_table,
     render_optimizer_panel,
@@ -31,6 +34,8 @@ from autonomous_multi_agent_real.engine.sensitivity import SensitivityEngine
 from autonomous_multi_agent_real.engine.tax import TaxEngine
 from autonomous_multi_agent_real.engine.waterfall import WaterfallEngine
 from autonomous_multi_agent_real.engine.workflow import DealPipeline
+from autonomous_multi_agent_real.features.coordinator import create_feature_store
+from autonomous_multi_agent_real.features.registry import get_default_registry
 from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
 from autonomous_multi_agent_real.storage.repository import DealRepository
 
@@ -61,6 +66,7 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
         con.print(" [8] Institutional Credit Policy Compliance Audit")
         con.print(" [9] Swarm Deliberation & Debate Transcript")
         con.print(" [10] Consolidated Portfolio Rollup")
+        con.print(" [11] Feature Store Explorer & Vector Inspection")
         con.print(" [0] Exit")
 
         try:
@@ -238,6 +244,25 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
             rollup = mgr.generate_rollup()
             risk = mgr.calculate_risk_profile()
             render_portfolio_summary(rollup, risk, con)
+
+        elif choice == "11":
+            coord = create_feature_store()
+            status = coord.get_status()
+            render_feature_store_status_panel(status, con)
+
+            con.print("\n[bold]Feature Sub-actions:[/bold] [1] Inspect Deal Vector  [2] List Registry Features  [3] Skip")
+            sub = click.prompt("Sub-action", default="1").strip()
+            if sub == "1":
+                deal_id = click.prompt("Target Deal ID", default=default_id).strip()
+                target_deal = repo.get_deal(deal_id)
+                if target_deal:
+                    vec = coord.extractor.extract_deal_features(target_deal)
+                    render_feature_vector_table(vec, con)
+                else:
+                    con.print(f"[red]Deal '{deal_id}' not found.[/red]")
+            elif sub == "2":
+                reg = get_default_registry()
+                render_feature_registry_table(reg.list_features(), con)
 
         else:
             con.print("[red]Unknown option. Please choose a valid number from the menu.[/red]")
