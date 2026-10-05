@@ -251,6 +251,34 @@ class FeatureStoreCoordinator:
         """Audit parity between online and offline stores."""
         return self.materialization_engine.sync_audit()
 
+    def get_status(self) -> Dict[str, Any]:
+        """Return operational telemetry across offline, online, and buffer tiers."""
+        buf_metrics = self.buffer.get_status()
+        manifest = self.offline_store.get_manifest()
+        return {
+            "offline_store": {
+                "base_path": str(self.base_path),
+                "total_files": manifest.total_files,
+                "total_records": manifest.total_records,
+                "entity_count": len(self.offline_store.list_entities()),
+            },
+            "online_store": {
+                "cached_entities": self.online_store.size(),
+                "max_capacity": self.online_store.config.max_entries,
+                "eviction_policy": getattr(self.online_store.config.eviction_policy, "value", str(self.online_store.config.eviction_policy)),
+                "ttl_seconds": self.online_store.config.ttl_seconds,
+            },
+            "buffer": {
+                "records_in_buffer": buf_metrics.records_in_buffer,
+                "buffer_capacity": self.buffer.capacity,
+                "buffer_utilization": buf_metrics.buffer_utilization,
+                "total_records_ingested": buf_metrics.total_records_ingested,
+                "total_flushes": buf_metrics.total_flushes,
+                "dropped_records": buf_metrics.dropped_records,
+                "is_healthy": buf_metrics.is_healthy,
+            },
+        }
+
     def get_pipeline_interceptor(self) -> PipelineFeatureInterceptor:
         """Retrieve configured pipeline interceptor hook."""
         return self.interceptor

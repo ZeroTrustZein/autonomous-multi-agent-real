@@ -111,6 +111,11 @@ class FeatureMetadata(BaseModel):
             raise ValueError("Feature name cannot be empty")
         return clean
 
+    @property
+    def is_derived(self) -> bool:
+        """Whether this feature is dynamically derived/computed."""
+        return self.category == FeatureCategory.DERIVED or "derived" in self.tags
+
     def to_arrow_field(self) -> pa.Field:
         """Generate PyArrow Field definition matching this metadata."""
         return pa.field(

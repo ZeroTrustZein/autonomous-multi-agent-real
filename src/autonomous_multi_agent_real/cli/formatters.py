@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -10,11 +10,9 @@ from rich.table import Table
 
 from autonomous_multi_agent_real.collaboration.debate import DebateTranscript
 from autonomous_multi_agent_real.features.types import (
-    EnrichedFeatureContext,
     FeatureMetadata,
     FeatureQualityReport,
     FeatureVector,
-    MaterializationJob,
 )
 from autonomous_multi_agent_real.portfolio.models import (
     PortfolioRiskProfile,
@@ -754,7 +752,8 @@ def render_feature_registry_table(
     table.add_column("Description", style="white")
 
     for f in features:
-        is_derived = "[bold green]YES[/bold green]" if f.is_derived else "[dim]NO[/dim]"
+        is_derived_val = getattr(f, "is_derived", False)
+        is_derived = "[bold green]YES[/bold green]" if is_derived_val else "[dim]NO[/dim]"
         is_null = "[dim]YES[/dim]" if f.is_nullable else "[red]NO[/red]"
         tags_str = ", ".join(f.tags) if f.tags else "-"
         cat_str = getattr(f.category, "value", str(f.category))
@@ -780,19 +779,22 @@ def render_feature_metadata_panel(meta: FeatureMetadata, console: Console) -> No
     """Render comprehensive metadata attributes for a single feature."""
     cat_str = getattr(meta.category, "value", str(meta.category))
     dtype_str = getattr(meta.data_type, "value", str(meta.data_type))
-    deps = ", ".join(meta.dependencies) if meta.dependencies else "None"
+    deps_list = getattr(meta, "dependencies", []) or []
+    deps = ", ".join(deps_list) if deps_list else "None"
     tags = ", ".join(meta.tags) if meta.tags else "None"
     min_v = f"{meta.min_value:,.2f}" if meta.min_value is not None else "None"
     max_v = f"{meta.max_value:,.2f}" if meta.max_value is not None else "None"
     def_v = str(meta.default_value) if meta.default_value is not None else "None"
+    entity_key = getattr(meta, "entity_type", getattr(meta, "entity_key", "deal"))
+    is_derived_val = getattr(meta, "is_derived", False)
 
     body = (
         f"[bold cyan]Feature Name:[/bold cyan] {meta.name}\n"
         f"[bold]Description:[/bold] {meta.description}\n"
         f"[bold]Category:[/bold] [green]{cat_str}[/green] | "
         f"[bold]Data Type:[/bold] [magenta]{dtype_str}[/magenta] | "
-        f"[bold]Entity Type:[/bold] {meta.entity_type}\n"
-        f"[bold]Derived:[/bold] {'[green]Yes[/green]' if meta.is_derived else 'No'} | "
+        f"[bold]Entity Key:[/bold] {entity_key}\n"
+        f"[bold]Derived:[/bold] {'[green]Yes[/green]' if is_derived_val else 'No'} | "
         f"[bold]Nullable:[/bold] {'[yellow]Yes[/yellow]' if meta.is_nullable else 'No'} | "
         f"[bold]Default Value:[/bold] {def_v}\n"
         f"[bold]Allowed Range:[/bold] [{min_v}, {max_v}] | [bold]Unit:[/bold] {meta.unit or 'N/A'}\n"

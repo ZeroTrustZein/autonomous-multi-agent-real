@@ -61,6 +61,11 @@ class ParquetFeatureStore:
         data = json.loads(self._manifest_file.read_text(encoding="utf-8"))
         return FeatureStoreManifest.model_validate(data)
 
+    @property
+    def manifest(self) -> FeatureStoreManifest:
+        """Convenience property for manifest."""
+        return self.get_manifest()
+
     def _save_manifest(self, manifest: FeatureStoreManifest) -> None:
         """Persist updated manifest to disk."""
         self._manifest_file.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
@@ -210,6 +215,14 @@ class ParquetFeatureStore:
             if str(rel_parent) != ".":
                 partitions.add(str(rel_parent).replace("\\", "/"))
         return sorted(partitions)
+
+    def list_entities(self) -> List[str]:
+        """List all unique entity IDs stored in the offline store."""
+        table = self.query()
+        if table is None or table.num_rows == 0:
+            return []
+        pydict = table_to_safe_pydict(table)
+        return sorted(list({str(e) for e in pydict.get("entity_id", [])}))
 
     def read_all_tables(self) -> Optional[pa.Table]:
         """Read and concatenate all stored Parquet files into a unified Arrow Table."""

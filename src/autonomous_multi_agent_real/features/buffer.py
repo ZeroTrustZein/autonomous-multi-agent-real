@@ -216,16 +216,6 @@ class StreamFeatureBuffer:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()
 
-    def push(self, item: Union[FeatureRecord, FeatureVector, FeatureStreamEvent]) -> bool:
-        """Alias for adding record, vector, or stream event."""
-        if isinstance(item, FeatureRecord):
-            return self.add_record(item)
-        elif isinstance(item, FeatureVector):
-            return self.add_vector(item) > 0
-        elif isinstance(item, FeatureStreamEvent):
-            return self.add_event(item) > 0
-        return False
-
     def drain(self) -> List[FeatureRecord]:
         """Drain and return all current buffered records without calling flush_sink."""
         with self._lock:
