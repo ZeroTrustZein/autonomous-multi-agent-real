@@ -5,12 +5,11 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
 
 from autonomous_multi_agent_real.cli.main import cli
-from autonomous_multi_agent_real.features.coordinator import create_feature_store
-from autonomous_multi_agent_real.storage.repository import DealRepository
 
 
 @pytest.fixture
