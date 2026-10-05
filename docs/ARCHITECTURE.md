@@ -329,6 +329,33 @@ Aggregates multiple individual property underwritings into a cohesive portfolio:
 
 ---
 
+### 2.13 Real-Time Feature Store & Columnar Storage Engine (`features/`)
+
+* **Dual-Tier Storage Architecture**:
+  - **Online Store (`OnlineFeatureStore`)**: In-memory, thread-safe LRU cache with configurable entity capacity (default 10,000) and time-to-live expiration (default 24h). Provides deterministic sub-millisecond point and batch lookups for real-time model inference and active underwriting session queries.
+  - **Offline Store (`ParquetFeatureStore`)**: Hive-partitioned (`year={YYYY}/month={MM}`) columnar storage on Apache Parquet via PyArrow, with Snappy compression and vectorized column projection. Enables petabyte-scale historical analytical querying, time-travel queries (`query_as_of`), and partition compaction.
+* **Unified Dual-Tier Serving (`FeatureServingService`)**:
+  - Implements transparent tiered resolution: checks low-latency online cache first, and gracefully falls back to offline Parquet columnar files if an entity is not cached or expired.
+  - Supports single-entity lookups, multi-entity batch feature maps, and column-oriented numeric feature matrices (`get_feature_matrix()`) formatted directly for scikit-learn / XGBoost model scoring.
+* **Stream Buffer & Ingestion Pipeline (`StreamFeatureBuffer`)**:
+  - High-throughput asynchronous streaming buffer decoupling ingress event processing from disk I/O.
+  - Configurable capacity-driven (`buffer_size=1000`) and time-driven (`flush_interval_seconds=5.0`) micro-batch flushes.
+  - Strict watermark validation rejecting stale or out-of-order observation timestamps, with dead-letter queue (DLQ) isolation for malformed payloads and retries.
+* **Point-in-Time Joins & ML Training Generator (`TrainingDatasetGenerator`)**:
+  - Eliminates data leakage and lookahead bias in machine learning datasets via historical point-in-time (AS-OF) joins: matches observation milestones strictly with feature vectors that were available at or before `observation.timestamp`.
+  - Generates deterministic, leak-free train/validation/test splits (e.g. 70/15/15) with statistical Pearson correlation matrices across feature dimensions.
+* **Statistical Feature Quality & Drift Auditing (`FeatureQualityEngine`)**:
+  - Continuous data profiling computing null rates, mean, standard deviation, bounds, and quantiles (p25, p50, p75, p90, p99) across feature dimensions.
+  - Boundary constraint auditing verifying values against registered upper/lower limits in `FeatureMetadata`.
+  - Non-parametric distribution drift detection between baseline and production cohorts via two-sample Kolmogorov-Smirnov (KS) tests and Population Stability Index (PSI).
+* **Pipeline Interception & Cohort Enrichment**:
+  - **`PipelineFeatureInterceptor`**: Event-driven hooks attaching directly to `DealPipeline` lifecycle stages (`on_deal_started`, `on_stage_completed`, `on_deal_completed`) to seamlessly extract, aggregate, and store features as underwriting runs execute.
+  - **`FeatureContextEnricher`**: Augments deals with comparative percentile ranks, empirical z-scores, and cohort medians across peer groups (e.g., property type, submarket, vintage).
+* **Master Facade (`FeatureStoreCoordinator`)**:
+  - Unified entry point coordinating registry, storage, buffer, serving, materialization, and quality inspection into a single cohesive facade initialized via `create_feature_store()`.
+
+---
+
 ## 3. Data Flow & Execution Sequence
 
 The end-to-end execution of a deal follows this deterministic sequence:
@@ -361,14 +388,19 @@ The end-to-end execution of a deal follows this deterministic sequence:
          │
          ├── Stage 7: RuleEngine.evaluate() ──────► Institutional Credit Policy Covenant Audit
          │
-         └── Stage 8: InvestmentCommitteeAgent ──► Final Synthesis, 0-100 Score & Verdict
-                         │
-                         ▼
-             [ UnderwritingResult Dossier ]
-                         │
-        ┌────────────────┼────────────────┐
-        ▼                ▼                ▼
-[ Rich CLI View ] [ Markdown Memo ] [ CSV/JSON Exporter ]
+          └── Stage 8: InvestmentCommitteeAgent ──► Final Synthesis, 0-100 Score & Verdict
+                          │
+                          ▼
+              [ UnderwritingResult Dossier ]
+                          │
+         ┌────────────────┼────────────────┬───────────────────────────┐
+         ▼                ▼                ▼                           ▼
+ [ Rich CLI View ] [ Markdown Memo ] [ CSV/JSON Exporter ] [ PipelineFeatureInterceptor ]
+                                                                       │
+                                                                       ▼
+                                                        [ FeatureStoreCoordinator ]
+                                                           ├── Online Store (LRU/TTL)
+                                                           └── Offline Store (Parquet)
 ```
 
 ---
@@ -379,3 +411,4 @@ The end-to-end execution of a deal follows this deterministic sequence:
 2. **Zero Hallucination in Math**: All financial returns, debt schedules, taxes, and Monte Carlo paths are calculated deterministically via tested numerical code, never generated via probabilistic LLM token completion.
 3. **Immutability & Auditability**: Every underwriting run records complete provenance, agent confidence scores, risk flags, and parameter revisions.
 4. **Strict Typing**: All models enforce Pydantic v2 schemas with bounds checking and type safety.
+5. **Zero Data Leakage & Feature Parity**: Historical backtesting and machine learning models are protected by point-in-time AS-OF joins that strictly prevent future information leakage into historical observation milestones.

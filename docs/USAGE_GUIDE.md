@@ -17,6 +17,10 @@ This guide provides practical recipes, CLI commands, configuration templates, an
 9. [Recipe 9: Deal Repository Versioning, Revisions & Diffing](#recipe-9-deal-repository-versioning-revisions--diffing)
 10. [Recipe 10: Interactive Terminal Command Center (REPL)](#recipe-10-interactive-terminal-command-center-repl)
 11. [Recipe 11: Programmatic Python Pipeline Integration](#recipe-11-programmatic-python-pipeline-integration)
+12. [Recipe 12: Real-Time Feature Ingestion & Online Feature Serving](#recipe-12-real-time-feature-ingestion--online-feature-serving)
+13. [Recipe 13: Time-Travel Point-in-Time Joins & ML Training Datasets](#recipe-13-time-travel-point-in-time-joins--ml-training-datasets)
+14. [Recipe 14: Feature Quality Auditing & Statistical Drift Detection](#recipe-14-feature-quality-auditing--statistical-drift-detection)
+15. [Recipe 15: Feature Store CLI Management & Interactive Operations](#recipe-15-feature-store-cli-management--interactive-operations)
 
 ---
 
