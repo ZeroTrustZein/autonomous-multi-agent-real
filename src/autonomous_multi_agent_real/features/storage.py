@@ -314,25 +314,25 @@ class ParquetFeatureStore:
 
         pydict = table_to_safe_pydict(table)
         timestamps = pydict["timestamp"]
-        latest_idx = -1
-        latest_ts = None
-
-        for idx, ts in enumerate(timestamps):
-            if ts is not None and ts <= as_of:
-                if latest_ts is None or ts > latest_ts:
-                    latest_ts = ts
-                    latest_idx = idx
-
-        if latest_idx == -1:
+        # Point-in-time view: for every feature, keep its most recent non-null
+        # value observed at or before `as_of`. Pipelines write one wide vector and
+        # many single-feature records, often within the same millisecond, so the
+        # newest row alone does not carry every feature.
+        skip_cols = ("entity_id", "timestamp", "entity_type", "schema_version")
+        eligible = [idx for idx, ts in enumerate(timestamps) if ts is not None and ts <= as_of]
+        if not eligible:
             return None
+        eligible.sort(key=lambda i: timestamps[i])  # stable: ties keep row order
 
         extracted_features: Dict[str, Any] = {}
-        for col, values in pydict.items():
-            if col in ("entity_id", "timestamp", "entity_type", "schema_version"):
-                continue
-            val = values[latest_idx]
-            if val is not None:
-                extracted_features[col] = val
+        for idx in eligible:
+            for col, values in pydict.items():
+                if col in skip_cols:
+                    continue
+                val = values[idx]
+                if val is not None:
+                    extracted_features[col] = val
+        latest_ts = timestamps[eligible[-1]]
 
         return FeatureVector(
             entity_id=entity_id,
