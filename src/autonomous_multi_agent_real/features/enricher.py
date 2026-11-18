@@ -42,10 +42,10 @@ class FeatureContextEnricher:
             for cd in cohort_deals:
                 cohort_vectors.append(self.extractor.extract_deal_features(cd))
         elif self.online_store:
-            cohort_vectors = [
+            stored = [
                 self.online_store.get_vector(k.split(":")[-1]) for k in self.online_store.keys()
             ]
-            cohort_vectors = [v for v in cohort_vectors if v is not None]
+            cohort_vectors = [v for v in stored if v is not None]
 
         percentiles: Dict[str, float] = {}
         z_scores: Dict[str, float] = {}

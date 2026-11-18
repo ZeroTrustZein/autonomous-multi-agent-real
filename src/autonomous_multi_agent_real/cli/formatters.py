@@ -966,4 +966,3 @@ def render_training_dataset_summary(
             style = "bold green" if corr > 0.3 else ("bold red" if corr < -0.3 else "yellow")
             t.add_row(feat, f"[{style}]{corr:+.4f}[/{style}]")
         console.print(t)
-

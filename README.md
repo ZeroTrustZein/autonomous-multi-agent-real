@@ -1,11 +1,10 @@
 # Autonomous Multi-Agent Real Estate Deal Underwriting & Cash Flow Simulation Engine
 
-[![CI](https://github.com/zein/autonomous-multi-agent-real/actions/workflows/ci.yml/badge.svg)](https://github.com/zein/autonomous-multi-agent-real/actions)
+[![CI](https://github.com/ZeroTrustZein/autonomous-multi-agent-real/actions/workflows/ci.yml/badge.svg)](https://github.com/ZeroTrustZein/autonomous-multi-agent-real/actions)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Type Checked: Mypy](https://img.shields.io/badge/type%20checked-mypy-blue.svg)](https://mypy-lang.org/)
-[![Test Coverage: 96%](https://img.shields.io/badge/coverage-96%25-brightgreen.svg)](https://github.com/zein/autonomous-multi-agent-real)
 
 An institutional-grade, multi-agent real estate underwriting and stochastic simulation platform. Built in pure Python with **Pydantic v2**, high-speed **NumPy** vectorized Monte Carlo simulations, an event-driven agent orchestration pipeline, cross-agent deliberation protocols, private equity distribution waterfalls, and automated credit policy compliance auditing.
 
@@ -119,7 +118,7 @@ The engine coordinates specialized underwriting agents arranged in an orchestrat
 
 ```bash
 # Clone the repository
-git clone https://github.com/zein/autonomous-multi-agent-real.git
+git clone https://github.com/ZeroTrustZein/autonomous-multi-agent-real.git
 cd autonomous-multi-agent-real
 
 # Create and activate virtual environment
@@ -183,7 +182,9 @@ print(f"Decision:          {result.decision.value.upper()}")
 print(f"Committee Score:   {result.committee_score:.1f}/100")
 print(f"Levered IRR:       {result.deal_metrics.levered_irr:.1%}")
 print(f"Equity Multiple:   {result.deal_metrics.equity_multiple:.2f}x")
-print(f"Senior Debt Sized: ${result.debt_sizing.loan_amount:,.0f} ({result.debt_sizing.binding_constraint})")
+print(
+    f"Senior Debt Sized: ${result.debt_sizing.loan_amount:,.0f} ({result.debt_sizing.binding_constraint})"
+)
 print(f"Monte Carlo P50:   {result.monte_carlo.p50_irr:.1%}")
 print(f"Tail VaR (95%):    {result.monte_carlo.var_95_irr:.1%}")
 

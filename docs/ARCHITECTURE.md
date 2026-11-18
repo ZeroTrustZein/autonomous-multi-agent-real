@@ -206,14 +206,14 @@ $$\mathbf{X} = \mathbf{\mu} + \mathbf{L} \mathbf{Z} \cdot \mathbf{\sigma}$$
 The waterfall engine computes equity cash distributions, compounding preferred return hurdles, and sponsor promote splits between Limited Partners (LP) and General Partners (GP).
 
 #### Distribution Mechanics:
-1. **Tier 1 — Return of Capital & Preferred Return**:
+1. **Tier 1: Return of Capital & Preferred Return**:
    - Cash flows first pay down unreturned equity capital pro-rata to LP ($90\%$) and GP ($10\%$).
    - Concurrently accrues compounding preferred return (default $8.0\%$ per annum) on unreturned capital.
-2. **Tier 2 — First Promote Tier**:
+2. **Tier 2: First Promote Tier**:
    - Above 8.0% IRR up to 14.0% IRR: Distributions split 80% LP / 20% GP promote.
-3. **Tier 3 — Second Promote Tier**:
+3. **Tier 3: Second Promote Tier**:
    - Above 14.0% IRR up to 18.0% IRR: Distributions split 70% LP / 30% GP promote.
-4. **Tier 4 — Residual Promote**:
+4. **Tier 4: Residual Promote**:
    - Above 18.0% IRR: Distributions split 50% LP / 50% GP promote.
 
 Computes separate LP IRR, LP Equity Multiple, GP IRR (boosted by promote), GP Equity Multiple, and total dollar sponsor promote generated.
