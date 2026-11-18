@@ -371,10 +371,10 @@ class FeatureExtractor:
                 features["cvar_95"] = float(mc.get("cvar_95_irr") or mc.get("cvar_95", 0.0))
             else:
                 features["mean_irr"] = float(
-                    getattr(mc, "mean_levered_irr", None) or getattr(mc, "mean_irr", 0.0)
+                    getattr(mc, "mean_levered_irr", None) or getattr(mc, "mean_irr", 0.0) or 0.0
                 )
                 features["std_irr"] = float(
-                    getattr(mc, "std_levered_irr", None) or getattr(mc, "std_irr", 0.0)
+                    getattr(mc, "std_levered_irr", None) or getattr(mc, "std_irr", 0.0) or 0.0
                 )
                 features["p10_irr"] = float(getattr(mc, "p10_irr", 0.0))
                 features["p50_irr"] = float(getattr(mc, "p50_irr", 0.0))
@@ -382,6 +382,7 @@ class FeatureExtractor:
                 prob_neg = float(
                     getattr(mc, "probability_negative_irr", None)
                     or getattr(mc, "probability_of_loss", 0.0)
+                    or 0.0
                 )
                 features["probability_negative_irr"] = prob_neg
                 features["default_probability"] = prob_neg
@@ -389,10 +390,10 @@ class FeatureExtractor:
                     getattr(mc, "probability_dscr_breach", 0.0)
                 )
                 features["var_95"] = float(
-                    getattr(mc, "var_95_irr", None) or getattr(mc, "var_95", 0.0)
+                    getattr(mc, "var_95_irr", None) or getattr(mc, "var_95", 0.0) or 0.0
                 )
                 features["cvar_95"] = float(
-                    getattr(mc, "cvar_95_irr", None) or getattr(mc, "cvar_95", 0.0)
+                    getattr(mc, "cvar_95_irr", None) or getattr(mc, "cvar_95", 0.0) or 0.0
                 )
 
         # 4. Breakeven Metrics
@@ -426,16 +427,17 @@ class FeatureExtractor:
                 )
             else:
                 features["lp_net_irr"] = float(
-                    getattr(wf, "lp_irr", None) or getattr(wf, "lp_net_irr", 0.0)
+                    getattr(wf, "lp_irr", None) or getattr(wf, "lp_net_irr", 0.0) or 0.0
                 )
                 features["gp_net_irr"] = float(
-                    getattr(wf, "gp_irr", None) or getattr(wf, "gp_net_irr", 0.0)
+                    getattr(wf, "gp_irr", None) or getattr(wf, "gp_net_irr", 0.0) or 0.0
                 )
                 features["lp_equity_multiple"] = float(getattr(wf, "lp_equity_multiple", 0.0))
                 features["gp_equity_multiple"] = float(getattr(wf, "gp_equity_multiple", 0.0))
                 features["total_promote_dollars"] = float(
                     getattr(wf, "gp_total_promote", None)
                     or getattr(wf, "total_promote_dollars", 0.0)
+                    or 0.0
                 )
 
         # 6. Committee Synthesis & Composite Score

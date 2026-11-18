@@ -207,8 +207,8 @@ class TrainingDatasetGenerator:
                 # If no vector found before observation timestamp, populate None or registry defaults
                 if feature_names is not None:
                     for k in feature_names:
-                        meta = self.registry.get(k)
-                        rec[k] = meta.default_value if meta else None
+                        feat_meta = self.registry.get(k)
+                        rec[k] = feat_meta.default_value if feat_meta else None
                         all_features_observed.add(k)
 
             joined_records.append(rec)

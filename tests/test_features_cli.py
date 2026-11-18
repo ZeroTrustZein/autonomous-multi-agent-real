@@ -94,7 +94,14 @@ def test_cli_features_inspect_and_backfill(cli_temp_dir):
     # 1. Backfill a specific deal
     res_bf = runner.invoke(
         cli,
-        ["features", "backfill", "--store-path", str(cli_temp_dir), "--deal-id", "austin-multifamily"],
+        [
+            "features",
+            "backfill",
+            "--store-path",
+            str(cli_temp_dir),
+            "--deal-id",
+            "austin-multifamily",
+        ],
     )
     assert res_bf.exit_code == 0
     assert "Backfilling features across 1 deals" in res_bf.output

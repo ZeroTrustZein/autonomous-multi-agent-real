@@ -265,7 +265,11 @@ class FeatureStoreCoordinator:
             "online_store": {
                 "cached_entities": self.online_store.size(),
                 "max_capacity": self.online_store.config.max_entries,
-                "eviction_policy": getattr(self.online_store.config.eviction_policy, "value", str(self.online_store.config.eviction_policy)),
+                "eviction_policy": getattr(
+                    self.online_store.config.eviction_policy,
+                    "value",
+                    str(self.online_store.config.eviction_policy),
+                ),
                 "ttl_seconds": self.online_store.config.ttl_seconds,
             },
             "buffer": {

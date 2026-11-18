@@ -250,7 +250,9 @@ def run_interactive_session(console: Optional[Console] = None) -> None:
             status = coord.get_status()
             render_feature_store_status_panel(status, con)
 
-            con.print("\n[bold]Feature Sub-actions:[/bold] [1] Inspect Deal Vector  [2] List Registry Features  [3] Skip")
+            con.print(
+                "\n[bold]Feature Sub-actions:[/bold] [1] Inspect Deal Vector  [2] List Registry Features  [3] Skip"
+            )
             sub = click.prompt("Sub-action", default="1").strip()
             if sub == "1":
                 deal_id = click.prompt("Target Deal ID", default=default_id).strip()

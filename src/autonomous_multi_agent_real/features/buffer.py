@@ -231,4 +231,3 @@ class StreamFeatureBuffer:
         """Return count of records currently in buffer."""
         with self._lock:
             return len(self._buffer)
-

@@ -49,7 +49,7 @@ from autonomous_multi_agent_real.features.coordinator import (
     create_feature_store,
 )
 from autonomous_multi_agent_real.features.registry import get_default_registry
-from autonomous_multi_agent_real.features.types import FeatureCategory
+from autonomous_multi_agent_real.features.types import FeatureCategory, FeatureVector
 from autonomous_multi_agent_real.portfolio.engine import PortfolioManager
 from autonomous_multi_agent_real.reporting.exporter import DataExporter
 from autonomous_multi_agent_real.reporting.memo import InvestmentMemoGenerator
@@ -975,6 +975,7 @@ def features_inspect_cmd(entity_id: str, store_path: Optional[str], from_deal: b
     """Retrieve and display the current feature vector for a property deal."""
     coord = create_feature_store(base_path=store_path)
 
+    vec: Optional[FeatureVector]
     if from_deal:
         repo = DealRepository()
         deal = repo.get_deal(entity_id)
@@ -1037,7 +1038,9 @@ def features_sync_cmd(store_path: Optional[str]):
     coord = create_feature_store(base_path=store_path)
     console.print("[cyan]Flushing in-memory buffer to Parquet...[/cyan]")
     flush_job = coord.flush_buffer()
-    console.print(f"[green]Buffer flush completed: {flush_job.features_count} records saved.[/green]")
+    console.print(
+        f"[green]Buffer flush completed: {flush_job.features_count} records saved.[/green]"
+    )
 
     console.print("[cyan]Materializing offline features to online cache...[/cyan]")
     sync_job = coord.materialize_to_online()
@@ -1103,7 +1106,9 @@ def features_dataset_cmd(
     repo = DealRepository()
     deals = repo.list_deals()
     if not deals:
-        console.print("[yellow]No deals available in repository to construct observations.[/yellow]")
+        console.print(
+            "[yellow]No deals available in repository to construct observations.[/yellow]"
+        )
         return
 
     # Backfill repository deals first so offline store has vectors
@@ -1143,7 +1148,9 @@ def features_dataset_cmd(
     if out_dir:
         out_p = Path(out_dir)
         exported_files = ds.export_parquet(out_p)
-        console.print(f"[green]Dataset exported to: {out_p.resolve()} ({len(exported_files)} splits)[/green]")
+        console.print(
+            f"[green]Dataset exported to: {out_p.resolve()} ({len(exported_files)} splits)[/green]"
+        )
 
 
 @cli.command(name="interactive")

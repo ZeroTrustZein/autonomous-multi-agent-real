@@ -182,7 +182,9 @@ print(f"Decision:          {result.decision.value.upper()}")
 print(f"Committee Score:   {result.committee_score:.1f}/100")
 print(f"Levered IRR:       {result.deal_metrics.levered_irr:.1%}")
 print(f"Equity Multiple:   {result.deal_metrics.equity_multiple:.2f}x")
-print(f"Senior Debt Sized: ${result.debt_sizing.loan_amount:,.0f} ({result.debt_sizing.binding_constraint})")
+print(
+    f"Senior Debt Sized: ${result.debt_sizing.loan_amount:,.0f} ({result.debt_sizing.binding_constraint})"
+)
 print(f"Monte Carlo P50:   {result.monte_carlo.p50_irr:.1%}")
 print(f"Tail VaR (95%):    {result.monte_carlo.var_95_irr:.1%}")
 

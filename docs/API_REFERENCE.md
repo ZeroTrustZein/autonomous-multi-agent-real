@@ -78,11 +78,11 @@ State machine stages of the underwriting lifecycle:
 Represents an individual unit layout specification within a property:
 ```python
 class UnitMixItem(BaseModel):
-    unit_type: str                  # e.g., "1BR/1BA", "2BR/2BA"
-    count: int                      # Unit count (ge=1)
-    square_feet: float              # Average square footage per unit (gt=0)
-    current_rent: float             # In-place monthly rent per unit (ge=0)
-    market_rent: float              # Projected market monthly rent (ge=0)
+    unit_type: str  # e.g., "1BR/1BA", "2BR/2BA"
+    count: int  # Unit count (ge=1)
+    square_feet: float  # Average square footage per unit (gt=0)
+    current_rent: float  # In-place monthly rent per unit (ge=0)
+    market_rent: float  # Projected market monthly rent (ge=0)
 ```
 **Methods:**
 * `total_monthly_current_rent() -> float`: `count * current_rent`
@@ -110,12 +110,12 @@ Capital markets and debt parameters:
 ```python
 class FinancingTerms(BaseModel):
     purchase_price: float
-    down_payment_pct: float = 0.25         # Equity down payment fraction (0.05 to 1.0)
-    interest_rate: float = 0.065           # Annual interest rate (0.01 to 0.25)
-    amortization_years: int = 30           # Loan amortization (5 to 40 years)
-    loan_term_years: int = 10              # Maturity term (1 to 30 years)
-    interest_only_months: int = 0          # Initial IO period in months (0 to 120)
-    closing_costs_pct: float = 0.02        # Financing & closing fee % (0.0 to 0.10)
+    down_payment_pct: float = 0.25  # Equity down payment fraction (0.05 to 1.0)
+    interest_rate: float = 0.065  # Annual interest rate (0.01 to 0.25)
+    amortization_years: int = 30  # Loan amortization (5 to 40 years)
+    loan_term_years: int = 10  # Maturity term (1 to 30 years)
+    interest_only_months: int = 0  # Initial IO period in months (0 to 120)
+    closing_costs_pct: float = 0.02  # Financing & closing fee % (0.0 to 0.10)
 ```
 
 #### `PropertyDeal`
@@ -226,7 +226,7 @@ class UnderwritingResult(BaseModel):
     deal_id: str
     deal_title: str
     decision: InvestmentDecision
-    committee_score: float                  # 0.0 to 100.0
+    committee_score: float  # 0.0 to 100.0
     deal_metrics: DealMetrics
     debt_sizing: DebtSizingResult
     cash_flows: List[AnnualCashFlow]
@@ -523,7 +523,9 @@ class PortfolioStressEngine:
     @staticmethod
     def get_default_stress_scenarios() -> List[PortfolioStressScenario]: ...
     @staticmethod
-    def run_stress_test(portfolio: PortfolioManager, scenario: PortfolioStressScenario) -> Dict[str, Any]: ...
+    def run_stress_test(
+        portfolio: PortfolioManager, scenario: PortfolioStressScenario
+    ) -> Dict[str, Any]: ...
 ```
 
 ---
@@ -548,9 +550,20 @@ class DealRepository:
     def __init__(self, data_dir: Optional[Path | str] = None): ...
     def save_deal(self, deal: PropertyDeal) -> None: ...
     def get_deal(self, deal_id: str) -> Optional[PropertyDeal]: ...
-    def list_deals(self, property_type: Optional[str] = None, min_units: Optional[int] = None, max_price: Optional[float] = None, min_cap_rate: Optional[float] = None) -> List[PropertyDeal]: ...
+    def list_deals(
+        self,
+        property_type: Optional[str] = None,
+        min_units: Optional[int] = None,
+        max_price: Optional[float] = None,
+        min_cap_rate: Optional[float] = None,
+    ) -> List[PropertyDeal]: ...
     def delete_deal(self, deal_id: str) -> bool: ...
-    def create_revision(self, deal: PropertyDeal, author: str = "analyst", change_summary: str = "Assumptions update") -> DealRevision: ...
+    def create_revision(
+        self,
+        deal: PropertyDeal,
+        author: str = "analyst",
+        change_summary: str = "Assumptions update",
+    ) -> DealRevision: ...
     def get_revisions(self, deal_id: str) -> List[DealRevision]: ...
     def diff_revisions(self, deal_id: str, rev1: int, rev2: int) -> List[DealRevisionDiff]: ...
     def revert_to_revision(self, deal_id: str, rev_number: int) -> Optional[PropertyDeal]: ...
@@ -648,12 +661,14 @@ class FeatureMetadata(BaseModel):
     # is_derived -> bool
     # to_arrow_field() -> pa.Field
 
+
 class FeatureValue(BaseModel):
     feature_name: str
     value: Any
     data_type: Optional[FeatureDataType] = None
     confidence: float = 1.0  # [0.0, 1.0]
     timestamp: datetime
+
 
 class FeatureRecord(BaseModel):
     entity_id: str
@@ -664,6 +679,7 @@ class FeatureRecord(BaseModel):
     source: str = "pipeline"
     partition_key: Optional[str] = None
 
+
 class FeatureVector(BaseModel):
     entity_id: str
     entity_type: str = "deal"
@@ -672,6 +688,7 @@ class FeatureVector(BaseModel):
     schema_version: str = "1.0.0"
     metadata: Dict[str, Any] = Field(default_factory=dict)
     # Methods: get(), has_feature(), to_dict(), to_numeric_array()
+
 
 class FeatureStreamEvent(BaseModel):
     event_id: str
@@ -685,21 +702,25 @@ class FeatureStreamEvent(BaseModel):
     retry_count: int = 0
     error_message: Optional[str] = None
 
+
 class StreamBufferConfig(BaseModel):
     buffer_size: int = 1000
     flush_interval_seconds: float = 5.0
     max_retries: int = 3
     dead_letter_queue_enabled: bool = True
 
+
 class ParquetPartitionSpec(BaseModel):
     partition_columns: List[str] = ["year", "month"]
     row_group_size: int = 10000
     compression: str = "SNAPPY"
 
+
 class OnlineStoreConfig(BaseModel):
     ttl_seconds: int = 86400
     max_entities: int = 10000
     eviction_policy: str = "LRU"
+
 
 class FeatureStatistics(BaseModel):
     feature_name: str
@@ -716,6 +737,7 @@ class FeatureStatistics(BaseModel):
     p90: Optional[float] = None
     p99: Optional[float] = None
 
+
 class FeatureQualityReport(BaseModel):
     is_valid: bool = True
     dataset_name: str = "feature_dataset"
@@ -728,6 +750,7 @@ class FeatureQualityReport(BaseModel):
     null_rate_violations: Dict[str, float] = Field(default_factory=dict)
     range_violations: Dict[str, str] = Field(default_factory=dict)
     validation_timestamp: datetime
+
 
 class MaterializationJob(BaseModel):
     job_id: str
@@ -742,6 +765,7 @@ class MaterializationJob(BaseModel):
     duration_seconds: float = 0.0
     error_message: Optional[str] = None
 
+
 class ObservationTarget(BaseModel):
     entity_id: str
     timestamp: datetime
@@ -753,7 +777,9 @@ class ObservationTarget(BaseModel):
 
 ```python
 def to_arrow_schema(definitions: Sequence[FeatureMetadata]) -> pa.Schema: ...
-def feature_vectors_to_arrow_table(vectors: Sequence[FeatureVector], schema: Optional[pa.Schema] = None) -> pa.Table: ...
+def feature_vectors_to_arrow_table(
+    vectors: Sequence[FeatureVector], schema: Optional[pa.Schema] = None
+) -> pa.Table: ...
 def feature_records_to_arrow_table(records: Sequence[FeatureRecord]) -> pa.Table: ...
 def table_to_safe_pydict(table: pa.Table) -> Dict[str, List[Any]]: ...
 ```
@@ -768,14 +794,21 @@ The central schema registry governing definition, registration, versioning, deri
 class FeatureRegistry:
     def __init__(self) -> None: ...
     def register(self, metadata: FeatureMetadata) -> None: ...
-    def register_derived(self, metadata: FeatureMetadata, compute_fn: Callable[[Dict[str, Any]], Any]) -> None: ...
+    def register_derived(
+        self, metadata: FeatureMetadata, compute_fn: Callable[[Dict[str, Any]], Any]
+    ) -> None: ...
     def get(self, name: str) -> Optional[FeatureMetadata]: ...
-    def list_features(self, category: Optional[FeatureCategory] = None, tags: Optional[List[str]] = None) -> List[FeatureMetadata]: ...
+    def list_features(
+        self, category: Optional[FeatureCategory] = None, tags: Optional[List[str]] = None
+    ) -> List[FeatureMetadata]: ...
     def compute_derived_features(self, raw_features: Dict[str, Any]) -> Dict[str, Any]: ...
-    def validate_features(self, features: Dict[str, Any], allow_missing: bool = True) -> Tuple[bool, List[str]]: ...
+    def validate_features(
+        self, features: Dict[str, Any], allow_missing: bool = True
+    ) -> Tuple[bool, List[str]]: ...
     def get_arrow_schema(self, feature_names: Optional[Sequence[str]] = None) -> pa.Schema: ...
     def to_dict(self) -> Dict[str, Any]: ...
     def from_dict(self, data: Dict[str, Any]) -> None: ...
+
 
 def get_default_registry() -> FeatureRegistry:
     """Return singleton institutional registry populated with underwriting metrics:
@@ -794,17 +827,32 @@ Extracts normalized feature vectors and atomic records from raw domain objects (
 ```python
 class FeatureExtractor:
     def __init__(self, registry: Optional[FeatureRegistry] = None) -> None: ...
-    def extract_deal_features(self, deal: PropertyDeal, context: Optional[Any] = None) -> FeatureVector: ...
-    def extract_deal_records(self, deal: PropertyDeal, context: Optional[Any] = None) -> List[FeatureRecord]: ...
-    def extract_from_underwrite(self, deal: PropertyDeal, underwrite_result: Any) -> FeatureVector: ...
-    def extract_from_dict(self, data: Dict[str, Any], entity_id: str, entity_type: str = "deal") -> FeatureVector: ...
+    def extract_deal_features(
+        self, deal: PropertyDeal, context: Optional[Any] = None
+    ) -> FeatureVector: ...
+    def extract_deal_records(
+        self, deal: PropertyDeal, context: Optional[Any] = None
+    ) -> List[FeatureRecord]: ...
+    def extract_from_underwrite(
+        self, deal: PropertyDeal, underwrite_result: Any
+    ) -> FeatureVector: ...
+    def extract_from_dict(
+        self, data: Dict[str, Any], entity_id: str, entity_type: str = "deal"
+    ) -> FeatureVector: ...
     def extract_from_stream_event(self, event: FeatureStreamEvent) -> FeatureVector: ...
+
 
 class WindowedAggregator:
     def __init__(self, window_size_seconds: float = 3600.0) -> None: ...
-    def add_observation(self, feature_name: str, value: float, timestamp: Optional[datetime] = None) -> None: ...
-    def get_window_statistics(self, feature_name: str, as_of: Optional[datetime] = None) -> Dict[str, float]: ...
-    def get_all_statistics(self, as_of: Optional[datetime] = None) -> Dict[str, Dict[str, float]]: ...
+    def add_observation(
+        self, feature_name: str, value: float, timestamp: Optional[datetime] = None
+    ) -> None: ...
+    def get_window_statistics(
+        self, feature_name: str, as_of: Optional[datetime] = None
+    ) -> Dict[str, float]: ...
+    def get_all_statistics(
+        self, as_of: Optional[datetime] = None
+    ) -> Dict[str, Dict[str, float]]: ...
     def clean_expired(self, current_time: Optional[datetime] = None) -> int: ...
 ```
 
@@ -817,11 +865,24 @@ Provides partitioned, columnar disk storage for offline analytics, time-travel p
 
 ```python
 class ParquetFeatureStore:
-    def __init__(self, base_path: Union[str, Path], partition_spec: Optional[ParquetPartitionSpec] = None, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def __init__(
+        self,
+        base_path: Union[str, Path],
+        partition_spec: Optional[ParquetPartitionSpec] = None,
+        registry: Optional[FeatureRegistry] = None,
+    ) -> None: ...
     def write_vectors(self, vectors: Sequence[FeatureVector]) -> int: ...
     def write_records(self, records: Sequence[FeatureRecord]) -> int: ...
-    def query(self, entity_ids: Optional[Sequence[str]] = None, feature_names: Optional[Sequence[str]] = None, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None) -> pa.Table: ...
-    def query_as_of(self, entity_id: str, as_of_time: datetime, feature_names: Optional[Sequence[str]] = None) -> Optional[FeatureVector]: ...
+    def query(
+        self,
+        entity_ids: Optional[Sequence[str]] = None,
+        feature_names: Optional[Sequence[str]] = None,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+    ) -> pa.Table: ...
+    def query_as_of(
+        self, entity_id: str, as_of_time: datetime, feature_names: Optional[Sequence[str]] = None
+    ) -> Optional[FeatureVector]: ...
     def get_latest_vector(self, entity_id: str) -> Optional[FeatureVector]: ...
     def compact_partitions(self) -> int: ...
 ```
@@ -842,12 +903,30 @@ class OnlineFeatureStore:
     def clear(self) -> None: ...
     def size(self) -> int: ...
 
+
 class FeatureServingService:
-    def __init__(self, online_store: OnlineFeatureStore, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
-    def get_online_features(self, entity_id: str, feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal", fallback_to_offline: bool = True) -> Dict[str, Any]: ...
-    def get_feature_vector(self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True) -> Optional[FeatureVector]: ...
-    def get_batch_features(self, entity_ids: Sequence[str], feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal") -> Dict[str, Dict[str, Any]]: ...
-    def get_feature_matrix(self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal") -> Dict[str, List[Any]]: ...
+    def __init__(
+        self, online_store: OnlineFeatureStore, offline_store: Optional[ParquetFeatureStore] = None
+    ) -> None: ...
+    def get_online_features(
+        self,
+        entity_id: str,
+        feature_names: Optional[Sequence[str]] = None,
+        entity_type: str = "deal",
+        fallback_to_offline: bool = True,
+    ) -> Dict[str, Any]: ...
+    def get_feature_vector(
+        self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True
+    ) -> Optional[FeatureVector]: ...
+    def get_batch_features(
+        self,
+        entity_ids: Sequence[str],
+        feature_names: Optional[Sequence[str]] = None,
+        entity_type: str = "deal",
+    ) -> Dict[str, Dict[str, Any]]: ...
+    def get_feature_matrix(
+        self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal"
+    ) -> Dict[str, List[Any]]: ...
 ```
 
 ---
@@ -859,7 +938,11 @@ Thread-safe ingestion buffer handling micro-batches, backpressure, watermarks, a
 
 ```python
 class StreamFeatureBuffer:
-    def __init__(self, config: Optional[StreamBufferConfig] = None, on_flush: Optional[Callable[[List[FeatureStreamEvent]], None]] = None) -> None: ...
+    def __init__(
+        self,
+        config: Optional[StreamBufferConfig] = None,
+        on_flush: Optional[Callable[[List[FeatureStreamEvent]], None]] = None,
+    ) -> None: ...
     def push_event(self, event: FeatureStreamEvent) -> bool: ...
     def push_vector(self, vector: FeatureVector) -> bool: ...
     def push_record(self, record: FeatureRecord) -> bool: ...
@@ -873,10 +956,23 @@ Coordinates asynchronous or on-demand synchronization between in-memory streamin
 
 ```python
 class MaterializationEngine:
-    def __init__(self, offline_store: ParquetFeatureStore, online_store: OnlineFeatureStore, buffer: Optional[StreamFeatureBuffer] = None, extractor: Optional[FeatureExtractor] = None) -> None: ...
-    def materialize_to_online(self, start_time: Optional[datetime] = None, end_time: Optional[datetime] = None, entity_ids: Optional[Sequence[str]] = None) -> MaterializationJob: ...
+    def __init__(
+        self,
+        offline_store: ParquetFeatureStore,
+        online_store: OnlineFeatureStore,
+        buffer: Optional[StreamFeatureBuffer] = None,
+        extractor: Optional[FeatureExtractor] = None,
+    ) -> None: ...
+    def materialize_to_online(
+        self,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        entity_ids: Optional[Sequence[str]] = None,
+    ) -> MaterializationJob: ...
     def flush_buffer_to_parquet(self) -> MaterializationJob: ...
-    def backfill_deals(self, deals: Sequence[PropertyDeal], sync_online: bool = True) -> MaterializationJob: ...
+    def backfill_deals(
+        self, deals: Sequence[PropertyDeal], sync_online: bool = True
+    ) -> MaterializationJob: ...
     def sync_audit(self) -> Dict[str, Any]: ...
 ```
 
@@ -897,8 +993,11 @@ class TrainingDataset(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     # Methods: to_arrow_table(), to_dict(), export_parquet()
 
+
 class TrainingDatasetGenerator:
-    def __init__(self, offline_store: ParquetFeatureStore, registry: Optional[FeatureRegistry] = None) -> None: ...
+    def __init__(
+        self, offline_store: ParquetFeatureStore, registry: Optional[FeatureRegistry] = None
+    ) -> None: ...
     def build_dataset(
         self,
         observations: Sequence[ObservationTarget],
@@ -908,7 +1007,9 @@ class TrainingDatasetGenerator:
         val_ratio: float = 0.15,
         test_ratio: float = 0.15,
     ) -> TrainingDataset: ...
-    def compute_feature_correlations(self, dataset: TrainingDataset) -> Dict[str, Dict[str, float]]: ...
+    def compute_feature_correlations(
+        self, dataset: TrainingDataset
+    ) -> Dict[str, Dict[str, float]]: ...
 ```
 
 ---
@@ -920,8 +1021,12 @@ Performs statistical profiling, boundary constraint validation, and drift analys
 ```python
 class FeatureQualityEngine:
     def __init__(self, registry: Optional[FeatureRegistry] = None) -> None: ...
-    def compute_statistics(self, vectors: Sequence[FeatureVector]) -> Dict[str, FeatureStatistics]: ...
-    def audit_dataset(self, vectors: Sequence[FeatureVector], dataset_name: str = "dataset") -> FeatureQualityReport: ...
+    def compute_statistics(
+        self, vectors: Sequence[FeatureVector]
+    ) -> Dict[str, FeatureStatistics]: ...
+    def audit_dataset(
+        self, vectors: Sequence[FeatureVector], dataset_name: str = "dataset"
+    ) -> FeatureQualityReport: ...
     def detect_drift(
         self,
         baseline_vectors: Sequence[FeatureVector],
@@ -939,8 +1044,18 @@ Augments raw deals with peer-cohort percentiles, z-scores, and benchmark spreads
 
 ```python
 class FeatureContextEnricher:
-    def __init__(self, extractor: FeatureExtractor, online_store: Optional[OnlineFeatureStore] = None, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
-    def enrich_deal(self, deal: PropertyDeal, cohort_deals: Optional[Sequence[PropertyDeal]] = None, cohort_name: str = "default_cohort") -> EnrichedFeatureContext: ...
+    def __init__(
+        self,
+        extractor: FeatureExtractor,
+        online_store: Optional[OnlineFeatureStore] = None,
+        offline_store: Optional[ParquetFeatureStore] = None,
+    ) -> None: ...
+    def enrich_deal(
+        self,
+        deal: PropertyDeal,
+        cohort_deals: Optional[Sequence[PropertyDeal]] = None,
+        cohort_name: str = "default_cohort",
+    ) -> EnrichedFeatureContext: ...
 ```
 
 #### `PipelineFeatureInterceptor`
@@ -948,7 +1063,13 @@ Provides non-invasive hooks attaching to `DealPipeline` stage events to automati
 
 ```python
 class PipelineFeatureInterceptor:
-    def __init__(self, extractor: FeatureExtractor, buffer: Optional[StreamFeatureBuffer] = None, online_store: Optional[OnlineFeatureStore] = None, offline_store: Optional[ParquetFeatureStore] = None) -> None: ...
+    def __init__(
+        self,
+        extractor: FeatureExtractor,
+        buffer: Optional[StreamFeatureBuffer] = None,
+        online_store: Optional[OnlineFeatureStore] = None,
+        offline_store: Optional[ParquetFeatureStore] = None,
+    ) -> None: ...
     def attach_to_pipeline(self, pipeline: Any) -> None: ...
     def on_deal_started(self, deal: PropertyDeal) -> None: ...
     def on_stage_completed(self, stage_name: str, deal: PropertyDeal, context: Any) -> None: ...
@@ -972,19 +1093,57 @@ class FeatureStoreCoordinator:
         buffer_config: Optional[StreamBufferConfig] = None,
     ) -> None: ...
 
-    def extract_and_persist(self, deal: PropertyDeal, context: Optional[Any] = None, sync_online: bool = True) -> FeatureVector: ...
-    def get_features(self, entity_id: str, feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal", fallback_to_offline: bool = True) -> Dict[str, Any]: ...
-    def get_feature_vector(self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True) -> Optional[FeatureVector]: ...
-    def get_batch_features(self, entity_ids: Sequence[str], feature_names: Optional[Sequence[str]] = None, entity_type: str = "deal") -> Dict[str, Dict[str, Any]]: ...
-    def get_feature_matrix(self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal") -> Dict[str, List[Any]]: ...
-    def enrich_deal(self, deal: PropertyDeal, cohort_deals: Optional[Sequence[PropertyDeal]] = None, cohort_name: str = "default_cohort") -> EnrichedFeatureContext: ...
-    def materialize_to_online(self, start_time: Optional[Any] = None, end_time: Optional[Any] = None, entity_ids: Optional[Sequence[str]] = None) -> MaterializationJob: ...
+    def extract_and_persist(
+        self, deal: PropertyDeal, context: Optional[Any] = None, sync_online: bool = True
+    ) -> FeatureVector: ...
+    def get_features(
+        self,
+        entity_id: str,
+        feature_names: Optional[Sequence[str]] = None,
+        entity_type: str = "deal",
+        fallback_to_offline: bool = True,
+    ) -> Dict[str, Any]: ...
+    def get_feature_vector(
+        self, entity_id: str, entity_type: str = "deal", fallback_to_offline: bool = True
+    ) -> Optional[FeatureVector]: ...
+    def get_batch_features(
+        self,
+        entity_ids: Sequence[str],
+        feature_names: Optional[Sequence[str]] = None,
+        entity_type: str = "deal",
+    ) -> Dict[str, Dict[str, Any]]: ...
+    def get_feature_matrix(
+        self, entity_ids: Sequence[str], feature_names: Sequence[str], entity_type: str = "deal"
+    ) -> Dict[str, List[Any]]: ...
+    def enrich_deal(
+        self,
+        deal: PropertyDeal,
+        cohort_deals: Optional[Sequence[PropertyDeal]] = None,
+        cohort_name: str = "default_cohort",
+    ) -> EnrichedFeatureContext: ...
+    def materialize_to_online(
+        self,
+        start_time: Optional[Any] = None,
+        end_time: Optional[Any] = None,
+        entity_ids: Optional[Sequence[str]] = None,
+    ) -> MaterializationJob: ...
     def flush_buffer(self) -> MaterializationJob: ...
-    def backfill_deals(self, deals: Sequence[PropertyDeal], sync_online: bool = True) -> MaterializationJob: ...
-    def build_training_dataset(self, observations: Sequence[ObservationTarget], dataset_name: str, feature_names: Optional[Sequence[str]] = None, train_ratio: float = 0.7, val_ratio: float = 0.15, test_ratio: float = 0.15) -> TrainingDataset: ...
+    def backfill_deals(
+        self, deals: Sequence[PropertyDeal], sync_online: bool = True
+    ) -> MaterializationJob: ...
+    def build_training_dataset(
+        self,
+        observations: Sequence[ObservationTarget],
+        dataset_name: str,
+        feature_names: Optional[Sequence[str]] = None,
+        train_ratio: float = 0.7,
+        val_ratio: float = 0.15,
+        test_ratio: float = 0.15,
+    ) -> TrainingDataset: ...
     def audit_quality(self, entity_ids: Optional[Sequence[str]] = None) -> FeatureQualityReport: ...
     def audit_sync(self) -> Dict[str, Any]: ...
     def get_status(self) -> Dict[str, Any]: ...
+
 
 def create_feature_store(base_path: Optional[Union[str, Path]] = None) -> FeatureStoreCoordinator:
     """Instantiate and initialize default coordinator rooted at base_path or .feature_store."""
